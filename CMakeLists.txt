@@ -22,14 +22,14 @@ juce_add_plugin(midi-visu
     # VERSION 1.0.0
     # ICON_BIG "icon.png"
     # ICON_SMALL "icon.png"
-    COMPANY_NAME "yourcompany"
+    COMPANY_NAME "conjius"
     IS_SYNTH FALSE
-    NEEDS_MIDI_INPUT FALSE
+    NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE
-    IS_MIDI_EFFECT FALSE
+    IS_MIDI_EFFECT TRUE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     COPY_STEP TRUE
-    PLUGIN_CODE RBP1
+    PLUGIN_CODE MDVIS
     FORMATS VST3 AU Standalone
     PRODUCT_NAME "midi-visu")
 
