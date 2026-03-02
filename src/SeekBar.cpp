@@ -157,13 +157,16 @@ void SeekBar::mouseDown(const MouseEvent& e) {
 
     const float trackCY = static_cast<float>(kTrackAreaHeight) * 0.5f;
     const float trackY = trackCY - 2.0f;
-    const float trackBottom = trackCY + 2.0f;
     if (e.y < trackY || e.y >= kTrackAreaHeight) {
-        // Above track or label area: interval drag if within loop region
-        if (RangeSliderLogic::isInMiddleZone(mx, logic.loopStart(), logic.loopEnd(),
-                                              0.0, logic.maxValue(),
-                                              getTrackStart(), getTrackWidth(),
-                                              kThumbRadius)) {
+        // Above track or label area: check loop handles first, then interval
+        auto hit = logic.hitTest(mx, getTrackStart(), getTrackWidth(), kThumbRadius);
+        if (hit == MultiHandleSliderLogic::HandleType::LoopStart
+            || hit == MultiHandleSliderLogic::HandleType::LoopEnd) {
+            activeHandle = hit;
+        } else if (RangeSliderLogic::isInMiddleZone(
+                       mx, logic.loopStart(), logic.loopEnd(),
+                       0.0, logic.maxValue(),
+                       getTrackStart(), getTrackWidth(), kThumbRadius)) {
             activeHandle = MultiHandleSliderLogic::HandleType::MiddleZone;
             dragStartMouseX = mx;
             dragStartLoopMin = logic.loopStart();

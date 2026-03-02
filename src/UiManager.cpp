@@ -110,11 +110,11 @@ void UiManager::paint(Graphics& g) const {
         g.saveState();
         g.reduceClipRegion(px, 0, panelW, panelH);
 
-        // "OPTIONS" header (scrolls with content)
+        // "PROJECT" header (scrolls with content)
         const int titleY = OptionsPanelLayout::kTitleY - scroll;
         g.setFont(labelFont);
         g.setColour(editor.styleManager.panelTitle());
-        g.drawText("OPTIONS", px + pad, titleY, panelW - pad * 2, 18,
+        g.drawText("PROJECT", px + pad, titleY, panelW - pad * 2, 18,
                    Justification::left);
         g.setColour(editor.styleManager.divider());
         g.drawHorizontalLine(OptionsPanelLayout::kFirstDividerY - scroll,

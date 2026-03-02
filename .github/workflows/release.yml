@@ -21,7 +21,7 @@ jobs:
         id: version
         run: |
           # Read current version from CMakeLists.txt
-          CURRENT=$(grep -oP '(?<=project\(midi-visu VERSION )\d+\.\d+\.\d+' CMakeLists.txt)
+          CURRENT=$(sed -n 's/.*project(midi-visu VERSION \([0-9]*\.[0-9]*\.[0-9]*\)).*/\1/p' CMakeLists.txt)
           MAJOR=$(echo "$CURRENT" | cut -d. -f1)
           MINOR=$(echo "$CURRENT" | cut -d. -f2)
           PATCH=$(echo "$CURRENT" | cut -d. -f3)
