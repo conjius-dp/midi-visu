@@ -92,7 +92,7 @@ handle dragging, middle-zone dragging, and time formatting.
 ## JUCE
 
 - Location: `~/Downloads/JUCE` (added via `add_subdirectory` in CMakeLists.txt)
-- Version: JUCE 8 — use modern APIs:
+- Version: JUCE 8.0.12 — use modern APIs:
     - `Font(FontOptions().withName(...).withHeight(...))` — old `Font(name, size, style)`
       constructor is deprecated
     - Mouse wheel override is `mouseWheelMove` (not `mouseWheelMoved`)
