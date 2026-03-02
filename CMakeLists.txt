@@ -39,7 +39,29 @@ target_sources(midi-visu PRIVATE
     src/PluginEditor.cpp
     src/PluginEditor.h
     src/VideoBackground.mm
-    src/VideoBackground.h)
+        src/VideoBackground.h
+        src/VideoListManager.cpp
+        src/VideoListManager.h
+        src/VoiceManager.cpp
+        src/VoiceManager.h
+        src/MidiManager.cpp
+        src/MidiManager.h
+        src/InteractionManager.cpp
+        src/InteractionManager.h
+        src/UiManager.cpp
+        src/UiManager.h
+        src/AppConstants.h
+        src/RangeSlider.cpp
+        src/RangeSlider.h
+        src/RangeSliderLogic.cpp
+        src/RangeSliderLogic.h
+        src/StyleTokens.h
+        src/StyleManager.h
+        src/StyleManager.cpp
+        src/MultiHandleSliderLogic.cpp
+        src/MultiHandleSliderLogic.h
+        src/SeekBar.cpp
+        src/SeekBar.h)
 
 # VideoBackground.mm uses AVFoundation ObjC objects stored as members — enable ARC
 # so they are properly retained/released without explicit retain/release calls.
@@ -50,7 +72,9 @@ target_compile_definitions(midi-visu
     PUBLIC
         # JUCE_STRICT_REFCOUNTEDPOINTER=1 from .jucer
         JUCE_STRICT_REFCOUNTEDPOINTER=1
-        JUCE_VST3_CAN_REPLACE_VST2=0)
+        JUCE_VST3_CAN_REPLACE_VST2=0
+        PRIVATE
+        "MIDI_VISU_ASSETS_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/assets\"")
 
 target_link_libraries(midi-visu PRIVATE
     juce::juce_animation
@@ -73,3 +97,45 @@ target_link_libraries(midi-visu PRIVATE
     juce::juce_video)
 
 juce_generate_juce_header(midi-visu)
+
+# ── Unit tests ────────────────────────────────────────────────────────────────
+enable_testing()
+
+juce_add_console_app(midi-visu-tests
+        PRODUCT_NAME "midi-visu Tests")
+
+target_sources(midi-visu-tests PRIVATE
+        tests/main.cpp
+        tests/VoiceManagerTests.cpp
+        tests/MidiManagerTests.cpp
+        tests/RangeSliderLogicTests.cpp
+        tests/StyleTokensTests.cpp
+        tests/VideoListManagerTests.cpp
+        tests/MultiHandleSliderLogicTests.cpp
+        src/VoiceManager.cpp
+        src/VoiceManager.h
+        src/MidiManager.cpp
+        src/MidiManager.h
+        src/RangeSliderLogic.cpp
+        src/RangeSliderLogic.h
+        src/StyleTokens.h
+        src/VideoListManager.cpp
+        src/VideoListManager.h
+        src/MultiHandleSliderLogic.cpp
+        src/MultiHandleSliderLogic.h)
+
+target_include_directories(midi-visu-tests PRIVATE src)
+
+target_compile_definitions(midi-visu-tests
+        PUBLIC
+        JUCE_STANDALONE_APPLICATION=1
+        JUCE_STRICT_REFCOUNTEDPOINTER=1)
+
+target_link_libraries(midi-visu-tests PRIVATE
+        juce::juce_audio_basics
+        juce::juce_core
+        juce::juce_events)
+
+juce_generate_juce_header(midi-visu-tests)
+
+add_test(NAME midi-visu-tests COMMAND midi-visu-tests)

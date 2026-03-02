@@ -11,50 +11,56 @@
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
 #include "VideoBackground.h"
+#include "StyleManager.h"
+#include "InteractionManager.h"
+#include "UiManager.h"
+#include "RangeSlider.h"
+#include "VideoListManager.h"
+#include "SeekBar.h"
 
 //==============================================================================
-class MidiVisuEditor  : public AudioProcessorEditor,
-                        private Timer
-{
+class MidiVisuEditor : public AudioProcessorEditor,
+                       private Timer,
+                       public SeekBar::Listener {
 public:
-    explicit MidiVisuEditor (MidivisuAudioProcessor&);
+    explicit MidiVisuEditor(MidivisuAudioProcessor&);
     ~MidiVisuEditor() override;
 
     //==============================================================================
-    void paint (Graphics&) override;
-    void paintOverChildren (Graphics&) override;
+    void paint(Graphics&) override;
+    void paintOverChildren(Graphics&) override;
     void resized() override;
-    bool keyPressed (const KeyPress& key) override;
-    void mouseDown  (const MouseEvent&) override;
-    void mouseDrag  (const MouseEvent&) override;
-    void mouseUp    (const MouseEvent&) override;
-    void mouseWheelMove (const MouseEvent&, const MouseWheelDetails&) override;
+    bool keyPressed(const KeyPress& key) override;
+    void mouseDown(const MouseEvent&) override;
+    void mouseDrag(const MouseEvent&) override;
+    void mouseUp(const MouseEvent&) override;
+    void mouseWheelMove(const MouseEvent&, const MouseWheelDetails&) override;
 
 private:
     void timerCallback() override;
 
     MidivisuAudioProcessor& audioProcessor;
-    VideoBackground         videoBackground;
-    Image             videoFrame;
+    VideoBackground videoBackground;
+    Image videoFrame;
 
     // Smoothed radii
-    float smoothedRadius[4]     { 0.0f, 0.0f, 0.0f, 0.0f };
-    float drumSmoothedRadius[4] { 0.0f, 0.0f, 0.0f, 0.0f };
-    int   lastDrumHitCount[4]   { 0, 0, 0, 0 };
-    static constexpr float smoothing    = 0.10f;
+    float smoothedRadius[4]{0.0f, 0.0f, 0.0f, 0.0f};
+    float drumSmoothedRadius[4]{0.0f, 0.0f, 0.0f, 0.0f};
+    int lastDrumHitCount[4]{0, 0, 0, 0};
+    static constexpr float smoothing = 0.10f;
     static constexpr float drumSmoothing = 0.1f;
 
     // Clock sync
     int lastClockPulse = 0;
 
     // Log panel
-    bool                      logPanelOpen    = false;
-    StringArray         logLines;
+    bool logPanelOpen = false;
+    StringArray logLines;
     Array<Colour> logColors;
-    int                       logScrollOffset = 0;
-    int                       lastCh10RawHitCount       = 0;
-    int                       lastChannelNoteOnCount[4] = { 0, 0, 0, 0 };
-    static constexpr int maxLogLines   = 500;
+    int logScrollOffset = 0;
+    int lastCh10RawHitCount = 0;
+    int lastChannelNoteOnCount[4] = {0, 0, 0, 0};
+    static constexpr int maxLogLines = 500;
     static constexpr int logPanelWidth = 300;
 
     // Circle positions (0-3 = drums, 4-6 = melodic tracks 1-3)
@@ -62,49 +68,71 @@ private:
     // Brownian float
     Point<float> floatOffset[7];
     Point<float> floatVel[7];
-    int                draggedCircle = -1;
-    Point<float> dragOffset;
+
+    // Ball masses — all equal for now, prepared for per-ball tuning.
+    float ballMass[7] = {1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f};
 
     void initDefaultPositions();
-    void writePositionsToFile (const File&);
-    void readPositionsFromFile (const File&);
-    void savePositions();   // opens "Save as…" dialog
-    void loadPositions();   // opens "Load" dialog
+    void writePositionsToFile(const File&) const;
+    void readPositionsFromFile(const File&);
+    void savePositions(); // opens "Save as…" dialog
+    void loadPositions(); // opens "Load" dialog
     File getAutoSaveFile() const;
     File lastPositionsFile;
     std::unique_ptr<FileChooser> fileChooser;
 
     // Video file selection
     File lastVideoFile;
-    std::unique_ptr<FileChooser> videoChooser;
-    void chooseVideoFile();
+    File assetsVideoDir;
+    VideoListManager videoListManager;
+    int videoListScrollOffset = 0;
+
+    void appendLog(const String& text, Colour color);
 
     // Options panel (O key)
-    bool               optionsPanelOpen = false;
-    ComboBox     voiceChannelBox[7];
-    ComboBox     clockDivisionBox;
-    ToggleButton videoToggle { "Video" };
-    ToggleButton blurToggle  { "Blur" };
-    ToggleButton floatToggle      { "Floating" };
-    ToggleButton collisionToggle  { " Collisions" };
-    ToggleButton clockKickToggle  { "Clock Sync" };
+    bool optionsPanelOpen = false;
+    String voiceNames[7];
+    Label voiceNameLabel[7];
+    ComboBox voiceChannelBox[7];
+    ComboBox clockDivisionBox;
+    ToggleButton videoToggle{"Video"};
+    ToggleButton blurToggle{"Blur"};
+    ToggleButton floatToggle{"Floating"};
+    ToggleButton collisionToggle{" Collisions"};
+    ToggleButton clockKickToggle{"Clock Sync"};
+    ToggleButton logMidiNotesToggle{"MIDI notes"};
+    ToggleButton logMidiClockToggle{"MIDI clock"};
+    TextButton clearLogButton{"Clear"};
 
-    // Ball masses — all equal for now, prepared for per-ball tuning.
-    float ballMass[7] = { 1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f };
-    Slider       blurSlider;
-    Slider       videoZoomSlider;
-    Slider       videoOpacitySlider;
-    Slider       ballSizeSlider;          // TwoValueHorizontal range slider
-    Slider       floatIntensitySlider;
-    Slider       floatSpeedSlider;
-    Slider       clockKickIntensitySlider;
-    TextButton   saveDefaultButton   { "Save Settings" };
-    TextButton   savePositionsButton { "Save Settings to..." };
-    TextButton   loadPositionsButton { "Load" };
-    TextButton   loadVideoButton     { "Load Video..." };
-    TextButton   midiSettingsButton  { "Audio / MIDI Settings" };
+    Slider blurSlider;
+    Slider videoZoomSlider;
+    Slider videoOpacitySlider;
+    RangeSlider ballSizeSlider;
+    Slider floatIntensitySlider;
+    Slider floatSpeedSlider;
+    Slider clockKickIntensitySlider;
+    TextButton saveDefaultButton{"Save Settings"};
+    TextButton savePositionsButton{"Save Settings to..."};
+    TextButton loadPositionsButton{"Load"};
+    TextButton videoPlayPauseButton{"Play"};
+    TextButton videoStopButton{"Stop"};
+    TextButton midiSettingsButton{"Audio / MIDI Settings"};
+    SeekBar seekBar;
+
+    void seekBarLoopChanged(SeekBar* bar) override;
+    void seekBarPlayheadDragged(SeekBar* bar) override;
 
     void showJuceAudioSettings();
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MidiVisuEditor)
+    // Style — declared before interaction/draw managers so they can access it.
+    StyleManager styleManager;
+
+    // Interaction and drawing managers — declared after all state they reference.
+    InteractionManager interactionManager;
+    UiManager uiManager;
+
+    friend class InteractionManager;
+    friend class UiManager;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MidiVisuEditor)
 };

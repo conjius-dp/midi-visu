@@ -8,60 +8,48 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "AppConstants.h"
+#include "StyleTokens.h"
 
 #if JUCE_STANDALONE_APPLICATION
- #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
 #endif
 
-static const Colour channelColours[4] =
-{
-    Colours::limegreen, // track 0 (ch 10) - not used directly, drums use drumColours
-    Colours::orange,    // track 1 (ch 2)
-    Colours::yellow,    // track 2 (ch 3)
-    Colour(0xffb03060), // track 3 (ch 4) - reddish-purple
-};
+//==============================================================================
+static String noteName(int n) {
+    return MidiMessage::getMidiNoteName(n, true, true, 4);
+}
 
-// Ch10 drum voices: progressively darker lime green. Voice 0 = kick (lightest).
-static const Colour drumColours[4] =
-{
-    Colour(0xff32cd32), // Voice 1 Kick  - limegreen
-    Colour(0xff27a427), // Voice 2 Clap  - ~80%
-    Colour(0xff1d7b1d), // Voice 3 Snare - ~60%
-    Colour(0xff125212), // Voice 4 HH    - ~40%
-};
+void MidiVisuEditor::appendLog(const String& text, Colour color) {
+    logLines.insert(0, text);
+    logColors.insert(0, color);
+    while (logLines.size() > maxLogLines) {
+        logLines.remove(logLines.size() - 1);
+        logColors.remove(logColors.size() - 1);
+    }
+}
 
 //==============================================================================
-static constexpr int kDefaultDrumCh[4]    = { 10, 10, 10, 10 };
-static constexpr int kDefaultMelodicCh[3] = { 2, 3, 4 };
-
-static const char* kVoiceNames[7]    = { "KICK", "NOISE", "SNARE", "HH", "K-2", "EREBUS",
-    "HYDRA" };
-static const Colour kVoiceColours[7] = {
-    Colour(0xff32cd32), Colour(0xff27a427), Colour(0xff1d7b1d), Colour(0xff125212),
-    Colours::orange, Colours::yellow, Colour(0xffb03060)
-};
-
 MidiVisuEditor::MidiVisuEditor(MidivisuAudioProcessor& p)
-    : AudioProcessorEditor(&p), audioProcessor(p)
-{
+    : AudioProcessorEditor(&p), audioProcessor(p),
+      interactionManager(*this), uiManager(*this) {
     setWantsKeyboardFocus(true);
 
     // Voice channel ComboBoxes (hidden until options panel opens).
-    for (int i = 0; i < 7; ++i)
-    {
+    for (int i = 0; i < 7; ++i) {
         for (int ch = 1; ch <= 16; ++ch)
             voiceChannelBox[i].addItem(String(ch), ch);
 
         const int defaultCh = (i < 4) ? kDefaultDrumCh[i] : kDefaultMelodicCh[i - 4];
         voiceChannelBox[i].setSelectedId(defaultCh, dontSendNotification);
 
-        voiceChannelBox[i].onChange = [this, i]
-        {
+        voiceChannelBox[i].onChange = [this, i] {
             const int ch = voiceChannelBox[i].getSelectedId();
             if (i < 4)
-                audioProcessor.drumVoiceMidiChannel[i].store(ch, std::memory_order_relaxed);
+                audioProcessor.voiceManager.setDrumChannel(i, ch);
             else
-                audioProcessor.melodicMidiChannel[i - 4].store(ch, std::memory_order_relaxed);
+                audioProcessor.voiceManager.setMelodicChannel(i - 4, ch);
+            appendLog(voiceNames[i] + " -> ch" + String(ch), styleManager.logInfo());
         };
 
         addChildComponent(voiceChannelBox[i]);
@@ -91,16 +79,15 @@ MidiVisuEditor::MidiVisuEditor(MidivisuAudioProcessor& p)
     addChildComponent(videoOpacitySlider);
 
     // Clock division: id == pulse count per division (24 PPQ)
-    clockDivisionBox.addItem("1    (whole)",     96);
-    clockDivisionBox.addItem("1/2  (half)",      48);
-    clockDivisionBox.addItem("1/4  (quarter)",   24);
-    clockDivisionBox.addItem("1/8  (eighth)",    12);
-    clockDivisionBox.addItem("1/16 (sixteenth)",  6);
-    clockDivisionBox.addItem("1/32 (32nd)",       3);
+    clockDivisionBox.addItem("1    (whole)", 96);
+    clockDivisionBox.addItem("1/2  (half)", 48);
+    clockDivisionBox.addItem("1/4  (quarter)", 24);
+    clockDivisionBox.addItem("1/8  (eighth)", 12);
+    clockDivisionBox.addItem("1/16 (sixteenth)", 6);
+    clockDivisionBox.addItem("1/32 (32nd)", 3);
     clockDivisionBox.setSelectedId(24, dontSendNotification);
     addChildComponent(clockDivisionBox);
 
-    ballSizeSlider.setSliderStyle(Slider::TwoValueHorizontal);
     ballSizeSlider.setRange(5.0, 500.0, 1.0);
     ballSizeSlider.setMinAndMaxValues(20.0, 280.0, dontSendNotification);
     ballSizeSlider.setTextBoxStyle(Slider::NoTextBox, true, 0, 0);
@@ -129,16 +116,159 @@ MidiVisuEditor::MidiVisuEditor(MidivisuAudioProcessor& p)
     addChildComponent(floatIntensitySlider);
     addChildComponent(floatSpeedSlider);
 
-    saveDefaultButton.onClick   = [this] { writePositionsToFile(getAutoSaveFile()); };
-    savePositionsButton.onClick = [this] { savePositions(); };
-    loadPositionsButton.onClick = [this] { loadPositions(); };
-    loadVideoButton.onClick     = [this] { chooseVideoFile(); };
-    midiSettingsButton.onClick  = [this] { showJuceAudioSettings(); };
+    videoToggle.onClick = [this] {
+        appendLog(videoToggle.getToggleState() ? "Video: ON" : "Video: OFF",
+                  styleManager.logInfo());
+    };
+    blurToggle.onClick = [this] {
+        appendLog(blurToggle.getToggleState() ? "Blur: ON" : "Blur: OFF",
+                  styleManager.logInfo());
+    };
+    floatToggle.onClick = [this] {
+        appendLog(floatToggle.getToggleState() ? "Floating: ON" : "Floating: OFF",
+                  styleManager.logInfo());
+    };
+    collisionToggle.onClick = [this] {
+        appendLog(collisionToggle.getToggleState() ? "Collisions: ON" : "Collisions: OFF",
+                  styleManager.logInfo());
+    };
+    clockKickToggle.onClick = [this] {
+        appendLog(clockKickToggle.getToggleState() ? "Clock sync: ON" : "Clock sync: OFF",
+                  styleManager.logInfo());
+    };
+
+    clockDivisionBox.onChange = [this] {
+        appendLog("Clock div: " + clockDivisionBox.getText(), styleManager.logInfo());
+    };
+
+    saveDefaultButton.onClick = [this] {
+        writePositionsToFile(getAutoSaveFile());
+        appendLog("Save Settings", styleManager.logInfo());
+    };
+    savePositionsButton.onClick = [this] {
+        savePositions();
+        appendLog("Save Settings to...", styleManager.logInfo());
+    };
+    loadPositionsButton.onClick = [this] {
+        loadPositions();
+        appendLog("Load positions", styleManager.logInfo());
+    };
+    midiSettingsButton.onClick = [this] {
+        showJuceAudioSettings();
+        appendLog("Audio/MIDI settings", styleManager.logInfo());
+    };
     addChildComponent(saveDefaultButton);
     addChildComponent(savePositionsButton);
     addChildComponent(loadPositionsButton);
-    addChildComponent(loadVideoButton);
     addChildComponent(midiSettingsButton);
+
+    // Video playback controls
+    seekBar.addListener(this);
+    addChildComponent(seekBar);
+
+    videoPlayPauseButton.onClick = [this] {
+        if (videoListManager.isPlaying()) {
+            videoBackground.pause();
+            videoListManager.setPlayState(VideoListManager::PlayState::Paused);
+            videoPlayPauseButton.setButtonText("Play");
+            appendLog("Video: paused", styleManager.logInfo());
+        }
+        else {
+            videoBackground.play();
+            videoListManager.setPlayState(VideoListManager::PlayState::Playing);
+            videoPlayPauseButton.setButtonText("Pause");
+            appendLog("Video: playing", styleManager.logInfo());
+        }
+        repaint();
+    };
+    videoStopButton.onClick = [this] {
+        videoBackground.stop();
+        videoListManager.setPlayState(VideoListManager::PlayState::Stopped);
+        videoPlayPauseButton.setButtonText("Play");
+        appendLog("Video: stopped", styleManager.logInfo());
+        repaint();
+    };
+    addChildComponent(videoPlayPauseButton);
+    addChildComponent(videoStopButton);
+
+    // Apply dark theme to all JUCE controls.
+    for (auto* s : {
+             &blurSlider, &videoZoomSlider, &videoOpacitySlider,
+             &clockKickIntensitySlider, &floatIntensitySlider, &floatSpeedSlider
+         })
+        styleManager.applyToSlider(*s);
+
+    for (auto* b : {
+             &videoToggle, &blurToggle, &floatToggle, &collisionToggle, &clockKickToggle
+         })
+        styleManager.applyToToggleButton(*b);
+
+    for (auto* b : {&logMidiNotesToggle, &logMidiClockToggle}) {
+        styleManager.applyToToggleButton(*b);
+        b->setToggleState(true, dontSendNotification);
+        addChildComponent(*b);
+    }
+
+    clearLogButton.onClick = [this] {
+        logLines.clear();
+        logColors.clear();
+        repaint();
+    };
+    styleManager.applyToTextButton(clearLogButton);
+    addChildComponent(clearLogButton);
+
+    for (auto* b : {
+             &saveDefaultButton, &savePositionsButton, &loadPositionsButton,
+             &videoPlayPauseButton, &videoStopButton, &midiSettingsButton
+         })
+        styleManager.applyToTextButton(*b);
+
+    for (int i = 0; i < 7; ++i)
+        styleManager.applyToComboBox(voiceChannelBox[i]);
+    styleManager.applyToComboBox(clockDivisionBox);
+
+    // Mutable voice names (initialised from compile-time defaults).
+    for (int i = 0; i < 7; ++i)
+        voiceNames[i] = kVoiceNames[i];
+
+    // Inline-editable voice name labels (double-click to rename).
+    for (int i = 0; i < 7; ++i) {
+        voiceNameLabel[i].setText(voiceNames[i], dontSendNotification);
+        voiceNameLabel[i].setFont(styleManager.headingFont());
+        voiceNameLabel[i].setJustificationType(Justification::left);
+        voiceNameLabel[i].setColour(Label::textColourId, styleManager.voiceName());
+        voiceNameLabel[i].setColour(Label::backgroundColourId, Colours::transparentBlack);
+        voiceNameLabel[i].setColour(Label::outlineColourId, Colours::transparentBlack);
+        voiceNameLabel[i].setColour(Label::textWhenEditingColourId,
+                                    styleManager.voiceName());
+        voiceNameLabel[i].setColour(Label::backgroundWhenEditingColourId,
+                                    Colour(StyleTokens::kSliderBg));
+        voiceNameLabel[i].setColour(Label::outlineWhenEditingColourId,
+                                    styleManager.border());
+        voiceNameLabel[i].setEditable(false, true, false);
+        voiceNameLabel[i].onTextChange = [this, i] {
+            const String oldName = voiceNames[i];
+            voiceNames[i] = voiceNameLabel[i].getText();
+            appendLog(oldName + " -> " + voiceNames[i], styleManager.logInfo());
+        };
+        addChildComponent(voiceNameLabel[i]);
+    }
+
+    // Scan assets/video/ and populate the video list
+    assetsVideoDir = File(String(MIDI_VISU_ASSETS_DIR)).getChildFile("video");
+    {
+        Array<File> videoFiles;
+        assetsVideoDir.findChildFiles(videoFiles, File::findFiles, false,
+                                      "*.mp4;*.mov;*.m4v");
+        videoFiles.sort();
+        std::vector<VideoListManager::FileEntry> entries;
+        for (const auto& f : videoFiles) {
+            const double dur = VideoBackground::fileDuration(
+                f.getFullPathName().toRawUTF8());
+            entries.push_back({f.getFileName().toStdString(), dur});
+        }
+        videoListManager.setFiles(entries);
+    }
 
     setSize(1920, 1080);
     initDefaultPositions();
@@ -146,7 +276,7 @@ MidiVisuEditor::MidiVisuEditor(MidivisuAudioProcessor& p)
 
     // Open options panel on startup
     optionsPanelOpen = true;
-    for (auto& box : voiceChannelBox)    box.setVisible(true);
+    for (auto& box : voiceChannelBox) box.setVisible(true);
     videoToggle.setVisible(true);
     blurToggle.setVisible(true);
     blurSlider.setVisible(true);
@@ -155,7 +285,8 @@ MidiVisuEditor::MidiVisuEditor(MidivisuAudioProcessor& p)
     saveDefaultButton.setVisible(true);
     savePositionsButton.setVisible(true);
     loadPositionsButton.setVisible(true);
-    loadVideoButton.setVisible(true);
+    videoPlayPauseButton.setVisible(true);
+    videoStopButton.setVisible(true);
     midiSettingsButton.setVisible(true);
     ballSizeSlider.setVisible(true);
     floatToggle.setVisible(true);
@@ -165,87 +296,111 @@ MidiVisuEditor::MidiVisuEditor(MidivisuAudioProcessor& p)
     clockKickIntensitySlider.setVisible(true);
     floatIntensitySlider.setVisible(true);
     floatSpeedSlider.setVisible(true);
+    seekBar.setVisible(true);
+    for (auto& lbl : voiceNameLabel) lbl.setVisible(true);
     resized();
 
     startTimerHz(60);
 }
 
-MidiVisuEditor::~MidiVisuEditor()
-{
+MidiVisuEditor::~MidiVisuEditor() {
     stopTimer();
 }
 
 //==============================================================================
-static const Colour kChColours[4] = {
-    Colours::limegreen,   // ch10 (fallback for unmatched notes)
-    Colours::orange,      // ch2
-    Colours::yellow,      // ch3
-    Colour(0xffb03060),   // ch4
-};
+// Delegate paint and input to manager classes.
 
-static String noteName(int n)
-{
-    return MidiMessage::getMidiNoteName(n, true, true, 4);
+void MidiVisuEditor::paint(Graphics& g) {
+    uiManager.paint(g);
 }
 
-static void pushLog(StringArray& lines, Array<Colour>& colors, const String& text, Colour color)
-{
-    lines.insert (0, text);
-    colors.insert(0, color);
+void MidiVisuEditor::paintOverChildren(Graphics& g) {
+    uiManager.paintOverChildren(g);
 }
 
-// ── Circle position helpers ────────────────────────────────────────────────────
-void MidiVisuEditor::initDefaultPositions()
-{
-    const float w     = (float)getWidth();
-    const float h     = (float)getHeight();
+bool MidiVisuEditor::keyPressed(const KeyPress& key) {
+    return interactionManager.keyPressed(key);
+}
+
+void MidiVisuEditor::mouseDown(const MouseEvent& e) {
+    interactionManager.mouseDown(e);
+}
+
+void MidiVisuEditor::mouseDrag(const MouseEvent& e) {
+    interactionManager.mouseDrag(e);
+}
+
+void MidiVisuEditor::mouseUp(const MouseEvent& e) {
+    interactionManager.mouseUp(e);
+}
+
+void MidiVisuEditor::mouseWheelMove(const MouseEvent& e, const MouseWheelDetails& w) {
+    interactionManager.mouseWheelMove(e, w);
+}
+
+//==============================================================================
+// Circle position helpers
+
+void MidiVisuEditor::initDefaultPositions() {
+    const float w = static_cast<float>(getWidth());
+    const float h = static_cast<float>(getHeight());
     const float slotW = w / 4.0f;
-    const float rowH  = h / 4.0f;
+    const float rowH = h / 4.0f;
 
     for (int v = 0; v < 4; ++v)
-        circlePos[v] = { slotW * 0.5f, rowH * (3 - v) + rowH * 0.5f };
+        circlePos[v] = {slotW * 0.5f, rowH * (3 - v) + rowH * 0.5f};
 
     for (int i = 1; i <= 3; ++i)
-        circlePos[3 + i] = { slotW * i + slotW * 0.5f, h * 0.5f };
+        circlePos[3 + i] = {slotW * i + slotW * 0.5f, h * 0.5f};
 }
 
-File MidiVisuEditor::getAutoSaveFile() const
-{
+File MidiVisuEditor::getAutoSaveFile() const {
     return File::getSpecialLocation(File::userApplicationDataDirectory)
-               .getChildFile("MidiVisu")
-               .getChildFile("circle_positions.json");
+           .getChildFile("MidiVisu")
+           .getChildFile("circle_positions.json");
 }
 
-void MidiVisuEditor::writePositionsToFile(const File& file)
-{
+void MidiVisuEditor::writePositionsToFile(const File& file) const {
     Array<var> arr;
-    for (int i = 0; i < 7; ++i)
-    {
+    for (int i = 0; i < 7; ++i) {
         auto* entry = new DynamicObject();
-        entry->setProperty("name", String(kVoiceNames[i]));
-        entry->setProperty("x",   (double)circlePos[i].x);
-        entry->setProperty("y",   (double)circlePos[i].y);
+        entry->setProperty("name", voiceNames[i]);
+        entry->setProperty("x", (double)circlePos[i].x);
+        entry->setProperty("y", (double)circlePos[i].y);
         arr.add(entry);
     }
     auto* settings = new DynamicObject();
-    settings->setProperty("ballSizeMin",    ballSizeSlider.getMinValue());
-    settings->setProperty("ballSizeMax",    ballSizeSlider.getMaxValue());
-    settings->setProperty("videoEnabled",   videoToggle.getToggleState());
-    settings->setProperty("blurEnabled",   blurToggle.getToggleState());
-    settings->setProperty("blurRadius",    blurSlider.getValue());
-    settings->setProperty("videoZoom",     videoZoomSlider.getValue());
-    settings->setProperty("videoOpacity",  videoOpacitySlider.getValue());
-    settings->setProperty("floatEnabled",     floatToggle.getToggleState());
+    settings->setProperty("ballSizeMin", ballSizeSlider.getMinValue());
+    settings->setProperty("ballSizeMax", ballSizeSlider.getMaxValue());
+    settings->setProperty("videoEnabled", videoToggle.getToggleState());
+    settings->setProperty("blurEnabled", blurToggle.getToggleState());
+    settings->setProperty("blurRadius", blurSlider.getValue());
+    settings->setProperty("videoZoom", videoZoomSlider.getValue());
+    settings->setProperty("videoOpacity", videoOpacitySlider.getValue());
+    settings->setProperty("floatEnabled", floatToggle.getToggleState());
     settings->setProperty("collisionEnabled", collisionToggle.getToggleState());
     settings->setProperty("floatIntensity", floatIntensitySlider.getValue());
-    settings->setProperty("floatSpeed",     floatSpeedSlider.getValue());
-    settings->setProperty("clockDiv",      clockDivisionBox.getSelectedId());
-    settings->setProperty("clockKick",          clockKickToggle.getToggleState());
+    settings->setProperty("floatSpeed", floatSpeedSlider.getValue());
+    settings->setProperty("clockDiv", clockDivisionBox.getSelectedId());
+    settings->setProperty("clockKick", clockKickToggle.getToggleState());
     settings->setProperty("clockKickIntensity", clockKickIntensitySlider.getValue());
+    settings->setProperty("logMidiNotes", logMidiNotesToggle.getToggleState());
+    settings->setProperty("logMidiClock", logMidiClockToggle.getToggleState());
+    settings->setProperty("loopStart", seekBar.getLoopStart());
+    settings->setProperty("loopEnd", seekBar.getLoopEnd());
+
+    Array<var> midiChArr;
+    for (int i = 0; i < 7; ++i) midiChArr.add(voiceChannelBox[i].getSelectedId());
+    settings->setProperty("voiceChannels", midiChArr);
+
+    Array<var> namesArr;
+    for (int i = 0; i < 7; ++i) namesArr.add(voiceNames[i]);
+    settings->setProperty("voiceNames", namesArr);
 
     auto* root = new DynamicObject();
-    root->setProperty("circles",  arr);
+    root->setProperty("circles", arr);
     root->setProperty("settings", var(settings));
+    settings->setProperty("selectedVideoIndex", videoListManager.selectedIndex());
     if (lastVideoFile.existsAsFile())
         root->setProperty("videoPath", lastVideoFile.getFullPathName());
 
@@ -259,9 +414,8 @@ void MidiVisuEditor::writePositionsToFile(const File& file)
     file.replaceWithText(JSON::toString(var(root)));
 }
 
-void MidiVisuEditor::readPositionsFromFile(const File& file)
-{
-    if (! file.existsAsFile()) return;
+void MidiVisuEditor::readPositionsFromFile(const File& file) {
+    if (!file.existsAsFile()) return;
 
     const auto json = JSON::parse(file.loadFileAsString());
     auto* root = json.getDynamicObject();
@@ -269,653 +423,440 @@ void MidiVisuEditor::readPositionsFromFile(const File& file)
 
     auto* arr = root->getProperty("circles").getArray();
     if (arr != nullptr)
-    {
-        for (const auto& entry : *arr)
-        {
-            auto* obj = entry.getDynamicObject();
-            if (obj == nullptr) continue;
-
-            const String name = obj->getProperty("name").toString();
-            for (int j = 0; j < 7; ++j)
-            {
-                if (name == kVoiceNames[j])
-                {
-                    circlePos[j].x = (float)(double)obj->getProperty("x");
-                    circlePos[j].y = (float)(double)obj->getProperty("y");
-                    break;
-                }
+        for (int j = 0; j < jmin(7, arr->size()); ++j)
+            if (auto* obj = arr->getReference(j).getDynamicObject()) {
+                circlePos[j].x = static_cast<float>((double)obj->getProperty("x"));
+                circlePos[j].y = static_cast<float>((double)obj->getProperty("y"));
             }
-        }
-    }
 
-    if (auto* s = root->getProperty("settings").getDynamicObject())
-    {
+    if (auto* s = root->getProperty("settings").getDynamicObject()) {
         if (s->hasProperty("ballSizeMin") && s->hasProperty("ballSizeMax"))
             ballSizeSlider.setMinAndMaxValues((double)s->getProperty("ballSizeMin"),
                                               (double)s->getProperty("ballSizeMax"),
                                               dontSendNotification);
         if (s->hasProperty("videoEnabled"))
-            videoToggle.setToggleState((bool)s->getProperty("videoEnabled"), dontSendNotification);
+            videoToggle.setToggleState((bool)s->getProperty("videoEnabled"),
+                                       dontSendNotification);
         if (s->hasProperty("blurEnabled"))
-            blurToggle.setToggleState((bool)s->getProperty("blurEnabled"), dontSendNotification);
+            blurToggle.setToggleState((bool)s->getProperty("blurEnabled"),
+                                      dontSendNotification);
         if (s->hasProperty("blurRadius"))
-            blurSlider.setValue((double)s->getProperty("blurRadius"), dontSendNotification);
+            blurSlider.setValue((double)s->getProperty("blurRadius"),
+                                dontSendNotification);
         if (s->hasProperty("videoZoom"))
-            videoZoomSlider.setValue((double)s->getProperty("videoZoom"), dontSendNotification);
+            videoZoomSlider.setValue((double)s->getProperty("videoZoom"),
+                                     dontSendNotification);
         if (s->hasProperty("videoOpacity"))
-            videoOpacitySlider.setValue((double)s->getProperty("videoOpacity"), dontSendNotification);
+            videoOpacitySlider.setValue((double)s->getProperty("videoOpacity"),
+                                        dontSendNotification);
         if (s->hasProperty("floatEnabled"))
-            floatToggle.setToggleState((bool)s->getProperty("floatEnabled"), dontSendNotification);
+            floatToggle.setToggleState((bool)s->getProperty("floatEnabled"),
+                                       dontSendNotification);
         if (s->hasProperty("collisionEnabled"))
-            collisionToggle.setToggleState((bool)s->getProperty("collisionEnabled"), dontSendNotification);
+            collisionToggle.setToggleState((bool)s->getProperty("collisionEnabled"),
+                                           dontSendNotification);
         if (s->hasProperty("floatIntensity"))
-            floatIntensitySlider.setValue((double)s->getProperty("floatIntensity"), dontSendNotification);
+            floatIntensitySlider.setValue((double)s->getProperty("floatIntensity"),
+                                          dontSendNotification);
         if (s->hasProperty("floatSpeed"))
-            floatSpeedSlider.setValue((double)s->getProperty("floatSpeed"), dontSendNotification);
+            floatSpeedSlider.setValue((double)s->getProperty("floatSpeed"),
+                                      dontSendNotification);
         if (s->hasProperty("clockDiv"))
-            clockDivisionBox.setSelectedId((int)s->getProperty("clockDiv"), dontSendNotification);
+            clockDivisionBox.setSelectedId((int)s->getProperty("clockDiv"),
+                                           dontSendNotification);
         if (s->hasProperty("clockKick"))
-            clockKickToggle.setToggleState((bool)s->getProperty("clockKick"), dontSendNotification);
+            clockKickToggle.setToggleState((bool)s->getProperty("clockKick"),
+                                           dontSendNotification);
         if (s->hasProperty("clockKickIntensity"))
-            clockKickIntensitySlider.setValue((double)s->getProperty("clockKickIntensity"), dontSendNotification);
+            clockKickIntensitySlider.setValue(
+                (double)s->getProperty("clockKickIntensity"),
+                dontSendNotification);
+        if (s->hasProperty("logMidiNotes"))
+            logMidiNotesToggle.setToggleState((bool)s->getProperty("logMidiNotes"),
+                                              dontSendNotification);
+        if (s->hasProperty("logMidiClock"))
+            logMidiClockToggle.setToggleState((bool)s->getProperty("logMidiClock"),
+                                              dontSendNotification);
+        if (s->hasProperty("loopStart"))
+            seekBar.setLoopStart((double)s->getProperty("loopStart"));
+        if (s->hasProperty("loopEnd"))
+            seekBar.setLoopEnd((double)s->getProperty("loopEnd"));
+
+        if (auto* chArr = s->getProperty("voiceChannels").getArray())
+            for (int i = 0; i < jmin(7, chArr->size()); ++i) {
+                const int ch = (int)chArr->getReference(i);
+                voiceChannelBox[i].setSelectedId(ch, dontSendNotification);
+                if (i < 4) audioProcessor.voiceManager.setDrumChannel(i, ch);
+                else audioProcessor.voiceManager.setMelodicChannel(i - 4, ch);
+            }
+
+        if (auto* nmArr = s->getProperty("voiceNames").getArray())
+            for (int i = 0; i < jmin(7, nmArr->size()); ++i) {
+                voiceNames[i] = nmArr->getReference(i).toString();
+                voiceNameLabel[i].setText(voiceNames[i], dontSendNotification);
+            }
     }
 
-    const String videoPath = root->getProperty("videoPath").toString();
-    if (videoPath.isNotEmpty())
-    {
-        const File vf(videoPath);
-        if (vf.existsAsFile())
-        {
-            lastVideoFile = vf;
-            // Defer the actual AVFoundation load until the message loop is running;
-            // calling it directly from the constructor (before the run loop spins)
-            // leaves AVFoundation's async seek with no run-loop to complete on.
-            MessageManager::callAsync([this, path = vf.getFullPathName()]()
-            {
-                videoBackground.loadFile(path.toRawUTF8());
-            });
+    // Restore selected video — prefer index-based lookup, fall back to videoPath.
+    bool videoRestored = false;
+    if (auto* s = root->getProperty("settings").getDynamicObject()) {
+        if (s->hasProperty("selectedVideoIndex")) {
+            const int idx = (int)s->getProperty("selectedVideoIndex");
+            if (idx >= 0 && idx < videoListManager.fileCount()) {
+                videoListManager.setSelectedIndex(idx);
+                const File f = assetsVideoDir.getChildFile(
+                    String(videoListManager.filename(idx)));
+                if (f.existsAsFile()) {
+                    lastVideoFile = f;
+                    MessageManager::callAsync([this, path = f.getFullPathName()]() {
+                        videoBackground.setLoopPoints(seekBar.getLoopStart(),
+                                                      seekBar.getLoopEnd());
+                        videoBackground.loadFile(path.toRawUTF8());
+                        videoListManager.setPlayState(
+                            VideoListManager::PlayState::Playing);
+                        videoPlayPauseButton.setButtonText("Pause");
+                    });
+                    videoRestored = true;
+                }
+            }
+        }
+    }
+
+    if (!videoRestored) {
+        const String videoPath = root->getProperty("videoPath").toString();
+        if (videoPath.isNotEmpty()) {
+            const File vf(videoPath);
+            if (vf.existsAsFile()) {
+                lastVideoFile = vf;
+                MessageManager::callAsync([this, path = vf.getFullPathName()]() {
+                    videoBackground.setLoopPoints(seekBar.getLoopStart(),
+                                                  seekBar.getLoopEnd());
+                    videoBackground.loadFile(path.toRawUTF8());
+                    videoListManager.setPlayState(VideoListManager::PlayState::Playing);
+                    videoPlayPauseButton.setButtonText("Pause");
+                });
+            }
         }
     }
 }
 
-void MidiVisuEditor::savePositions()
-{
+void MidiVisuEditor::savePositions() {
     const File startDir = lastPositionsFile.existsAsFile()
                               ? lastPositionsFile.getParentDirectory()
                               : getAutoSaveFile().getParentDirectory();
-    fileChooser = std::make_unique<FileChooser>("Save Settings to...", startDir, "*.json");
+    fileChooser = std::make_unique<
+        FileChooser>("Save Settings to...", startDir, "*.json");
     fileChooser->launchAsync(FileBrowserComponent::saveMode
-                                 | FileBrowserComponent::canSelectFiles
-                                 | FileBrowserComponent::warnAboutOverwriting,
-        [this](const FileChooser& fc)
-        {
-            const File f = fc.getResult();
-            if (f != File{})
-            {
-                writePositionsToFile(f);
-                lastPositionsFile = f;
-            }
-        });
+                             | FileBrowserComponent::canSelectFiles
+                             | FileBrowserComponent::warnAboutOverwriting,
+                             [this](const FileChooser& fc) {
+                                 const File f = fc.getResult();
+                                 if (f != File{}) {
+                                     writePositionsToFile(f);
+                                     lastPositionsFile = f;
+                                 }
+                             });
 }
 
-void MidiVisuEditor::loadPositions()
-{
+void MidiVisuEditor::loadPositions() {
     const File startDir = lastPositionsFile.existsAsFile()
                               ? lastPositionsFile.getParentDirectory()
                               : getAutoSaveFile().getParentDirectory();
     fileChooser = std::make_unique<FileChooser>("Load Settings", startDir, "*.json");
-    fileChooser->launchAsync(FileBrowserComponent::openMode | FileBrowserComponent::canSelectFiles,
-        [this](const FileChooser& fc)
-        {
-            const File f = fc.getResult();
-            if (f != File{})
-            {
-                readPositionsFromFile(f);
-                lastPositionsFile = f;
-                repaint();
-            }
-        });
+    fileChooser->launchAsync(FileBrowserComponent::openMode
+                             | FileBrowserComponent::canSelectFiles,
+                             [this](const FileChooser& fc) {
+                                 const File f = fc.getResult();
+                                 if (f != File{}) {
+                                     readPositionsFromFile(f);
+                                     lastPositionsFile = f;
+                                     repaint();
+                                 }
+                             });
 }
 
-void MidiVisuEditor::chooseVideoFile()
-{
-    const File startDir = lastVideoFile.existsAsFile()
-                              ? lastVideoFile.getParentDirectory()
-                              : File::getSpecialLocation(File::userHomeDirectory);
-    videoChooser = std::make_unique<FileChooser>("Load Video", startDir, "*.mp4;*.mov;*.m4v");
-    videoChooser->launchAsync(FileBrowserComponent::openMode | FileBrowserComponent::canSelectFiles,
-        [this](const FileChooser& fc)
-        {
-            const File f = fc.getResult();
-            if (f != File{})
-            {
-                videoBackground.loadFile(f.getFullPathName().toRawUTF8());
-                lastVideoFile = f;
-                writePositionsToFile(getAutoSaveFile());
-            }
-        });
-}
 
-void MidiVisuEditor::timerCallback()
-{
-    static const String voiceNames[4] = { "Kick", "Clap", "Snare", "HH" };
-    static constexpr int kDrumNotes[4] = { 48, 50, 52, 54 }; // C3, D3, E3, F#3 (JUCE octave numbering)
+//==============================================================================
+void MidiVisuEditor::timerCallback() {
+    const float minR = static_cast<float>(ballSizeSlider.getMinValue());
+    const float maxR = static_cast<float>(ballSizeSlider.getMaxValue());
 
-    const float minR = (float)ballSizeSlider.getMinValue();
-    const float maxR = (float)ballSizeSlider.getMaxValue();
-
-    // --- ch10: animation (per-voice) — instant snap up, smooth decay ---
-    for (int v = 0; v < 4; ++v)
-    {
-        const int count = audioProcessor.drumVoiceHitCount[v].load(std::memory_order_relaxed);
-        if (count != lastDrumHitCount[v])
-        {
-            lastDrumHitCount[v]   = count;
+    // --- Drum voice animation (per-voice): instant snap up, smooth decay ---
+    for (int v = 0; v < 4; ++v) {
+        const int count = audioProcessor.midiManager.drumVoiceHitCount[v].load(
+            std::memory_order_relaxed);
+        if (count != lastDrumHitCount[v]) {
+            lastDrumHitCount[v] = count;
             drumSmoothedRadius[v] = maxR; // instant peak
         }
         drumSmoothedRadius[v] += (minR - drumSmoothedRadius[v]) * drumSmoothing;
     }
     {
-        const int count   = audioProcessor.ch10RawHitCount.load(std::memory_order_relaxed);
+        const int count = audioProcessor.midiManager.ch10RawHitCount.load(
+            std::memory_order_relaxed);
         const int newHits = count - lastCh10RawHitCount;
-        if (newHits > 0)
-        {
+        if (newHits > 0) {
             lastCh10RawHitCount = count;
-            const int note      = audioProcessor.ch10RawHitNote.load(std::memory_order_relaxed);
+            const int note = audioProcessor.midiManager.ch10RawHitNote.load(
+                std::memory_order_relaxed);
             int matchedVoice = -1;
             for (int v = 0; v < 4; ++v)
-                if (note == kDrumNotes[v]) { matchedVoice = v; break; }
+                if (note == VoiceManager::kDrumNotes[v]) {
+                    matchedVoice = v;
+                    break;
+                }
             const String label = (matchedVoice >= 0)
                                      ? voiceNames[matchedVoice]
                                      : ("ch10  " + noteName(note));
             const Colour color = (matchedVoice >= 0)
                                      ? drumColours[matchedVoice]
                                      : Colours::limegreen;
-            for (int h = 0; h < newHits; ++h)
-                pushLog(logLines, logColors, label, color);
+            if (logMidiNotesToggle.getToggleState())
+                for (int h = 0; h < newHits; ++h)
+                    appendLog(label, color);
         }
     }
 
-    // --- ch2/3/4: animation + log ---
-    for (int i = 1; i < 4; ++i)
-    {
-        const int note = audioProcessor.channelHighestNote[i].load();
+    // --- Melodic channels animation + log ---
+    for (int i = 1; i < 4; ++i) {
+        const int note = audioProcessor.midiManager.channelHighestNote[i].load();
         const float target = (note >= 0)
                                  ? (minR + (note / 127.0f) * (maxR - minR))
                                  : minR;
         smoothedRadius[i] += (target - smoothedRadius[i]) * smoothing;
 
-        const int count   = audioProcessor.channelNoteOnCount[i].load(std::memory_order_relaxed);
+        const int count = audioProcessor.midiManager.channelNoteOnCount[i].load(
+            std::memory_order_relaxed);
         const int newHits = count - lastChannelNoteOnCount[i];
-        if (newHits > 0)
-        {
+        if (newHits > 0) {
             lastChannelNoteOnCount[i] = count;
-            const int n  = audioProcessor.channelNoteOnNote[i].load(std::memory_order_relaxed);
-            const int ch = audioProcessor.melodicMidiChannel[i - 1].load(std::memory_order_relaxed);
+            const int n = audioProcessor.midiManager.channelNoteOnNote[i].load(
+                std::memory_order_relaxed);
+            const int ch = audioProcessor.voiceManager.getMelodicChannel(i - 1);
             const String label = ("ch" + String(ch) + "   " + noteName(n));
-            for (int h = 0; h < newHits; ++h)
-                pushLog(logLines, logColors, label, kChColours[i]);
+            if (logMidiNotesToggle.getToggleState())
+                for (int h = 0; h < newHits; ++h)
+                    appendLog(label, kChColours[i]);
         }
-    }
-
-    while (logLines.size() > maxLogLines)
-    {
-        logLines.remove (logLines.size()  - 1);
-        logColors.remove(logColors.size() - 1);
     }
 
     // MIDI clock kick — independent of float toggle.
     static Random rng;
     const bool floatActive = floatToggle.getToggleState();
-    const bool kickActive  = clockKickToggle.getToggleState();
+    const bool kickActive = clockKickToggle.getToggleState();
 
-    const int clockNow = audioProcessor.midiClockPulse.load(std::memory_order_relaxed);
-    const int div      = clockDivisionBox.getSelectedId();
-    if (kickActive && div > 0 && clockNow / div > lastClockPulse / div)
-    {
-        const float kickStr = 8.0f * (float)clockKickIntensitySlider.getValue();
-        for (int i = 0; i < 7; ++i)
-        {
+    const int clockNow = audioProcessor.midiManager.midiClockPulse.load(
+        std::memory_order_relaxed);
+    const int div = clockDivisionBox.getSelectedId();
+    if (kickActive && div > 0 && clockNow / div > lastClockPulse / div) {
+        const float kickStr = 8.0f * static_cast<float>(clockKickIntensitySlider.
+            getValue());
+        for (int i = 0; i < 7; ++i) {
             const float angle = rng.nextFloat() * MathConstants<float>::twoPi;
             floatVel[i].x += std::cos(angle) * kickStr;
             floatVel[i].y += std::sin(angle) * kickStr;
         }
+        if (logMidiClockToggle.getToggleState())
+            appendLog("CLOCK", styleManager.logClock());
     }
     lastClockPulse = clockNow;
 
     const bool collisionActive = collisionToggle.getToggleState();
 
-    if (floatActive || kickActive || collisionActive)
-    {
-        // Brownian force only when float is on.
-        const float intensity = floatActive ? (float)floatIntensitySlider.getValue() : 0.0f;
-        const float kForce   = 5.4f * intensity;
-        const float kDamping = 0.99f - (float)floatSpeedSlider.getValue() * 0.16f;
+    if (floatActive || kickActive || collisionActive) {
+        const float intensity = floatActive
+                                    ? static_cast<float>(floatIntensitySlider.getValue())
+                                    : 0.0f;
+        const float kForce = 5.4f * intensity;
+        const float kDamping = 0.99f - static_cast<float>(floatSpeedSlider.getValue()) *
+            0.16f;
 
-        for (int i = 0; i < 7; ++i)
-        {
-            if (intensity > 0.0f)
-            {
+        for (int i = 0; i < 7; ++i) {
+            if (intensity > 0.0f) {
                 floatVel[i].x += (rng.nextFloat() * 2.0f - 1.0f) * kForce;
                 floatVel[i].y += (rng.nextFloat() * 2.0f - 1.0f) * kForce;
             }
-            floatVel[i]   *= kDamping;
+            floatVel[i] *= kDamping;
             floatOffset[i] += floatVel[i];
         }
 
-        // Elastic collisions — radii match current visual size so MIDI-big balls push harder.
-        if (collisionActive)
-        {
+        // Elastic collisions — radii match current visual size.
+        if (collisionActive) {
             float cr[7];
             for (int v = 0; v < 4; ++v) cr[v] = jmax(minR, drumSmoothedRadius[v]);
             for (int i = 1; i < 4; ++i) cr[3 + i] = jmax(minR, smoothedRadius[i]);
 
-            const float W = (float)getWidth();
-            const float H = (float)getHeight();
+            const float W = static_cast<float>(getWidth());
+            const float H = static_cast<float>(getHeight());
 
             // Ball-wall
-            for (int i = 0; i < 7; ++i)
-            {
+            for (int i = 0; i < 7; ++i) {
                 const float cx = circlePos[i].x + floatOffset[i].x;
                 const float cy = circlePos[i].y + floatOffset[i].y;
-                if (cx - cr[i] < 0.f)       { floatOffset[i].x += cr[i] - cx;       floatVel[i].x =  std::abs(floatVel[i].x); }
-                else if (cx + cr[i] > W)    { floatOffset[i].x -= cx + cr[i] - W;   floatVel[i].x = -std::abs(floatVel[i].x); }
-                if (cy - cr[i] < 0.f)       { floatOffset[i].y += cr[i] - cy;       floatVel[i].y =  std::abs(floatVel[i].y); }
-                else if (cy + cr[i] > H)    { floatOffset[i].y -= cy + cr[i] - H;   floatVel[i].y = -std::abs(floatVel[i].y); }
+                if (cx - cr[i] < 0.f) {
+                    floatOffset[i].x += cr[i] - cx;
+                    floatVel[i].x = std::abs(floatVel[i].x);
+                }
+                else if (cx + cr[i] > W) {
+                    floatOffset[i].x -= cx + cr[i] - W;
+                    floatVel[i].x = -std::abs(floatVel[i].x);
+                }
+                if (cy - cr[i] < 0.f) {
+                    floatOffset[i].y += cr[i] - cy;
+                    floatVel[i].y = std::abs(floatVel[i].y);
+                }
+                else if (cy + cr[i] > H) {
+                    floatOffset[i].y -= cy + cr[i] - H;
+                    floatVel[i].y = -std::abs(floatVel[i].y);
+                }
             }
 
             // Ball-ball (general elastic, prepared for unequal masses)
             for (int i = 0; i < 7; ++i)
-            for (int j = i + 1; j < 7; ++j)
-            {
-                const float dx = (circlePos[j].x + floatOffset[j].x) - (circlePos[i].x + floatOffset[i].x);
-                const float dy = (circlePos[j].y + floatOffset[j].y) - (circlePos[i].y + floatOffset[i].y);
-                const float distSq = dx * dx + dy * dy;
-                const float minDist = cr[i] + cr[j];
-                if (distSq >= minDist * minDist || distSq < 0.0001f) continue;
+                for (int j = i + 1; j < 7; ++j) {
+                    const float dx = (circlePos[j].x + floatOffset[j].x)
+                        - (circlePos[i].x + floatOffset[i].x);
+                    const float dy = (circlePos[j].y + floatOffset[j].y)
+                        - (circlePos[i].y + floatOffset[i].y);
+                    const float distSq = dx * dx + dy * dy;
+                    const float minDist = cr[i] + cr[j];
+                    if (distSq >= minDist * minDist || distSq < 0.0001f) continue;
 
-                const float dist = std::sqrt(distSq);
-                const float nx = dx / dist, ny = dy / dist;
+                    const float dist = std::sqrt(distSq);
+                    const float nx = dx / dist, ny = dy / dist;
 
-                const float dvn = (floatVel[i].x - floatVel[j].x) * nx
-                                + (floatVel[i].y - floatVel[j].y) * ny;
-                if (dvn > 0.f)
-                {
-                    const float mi = ballMass[i], mj = ballMass[j];
-                    const float imp = 2.f * dvn / (mi + mj);
-                    floatVel[i].x -= imp * mj * nx;  floatVel[i].y -= imp * mj * ny;
-                    floatVel[j].x += imp * mi * nx;  floatVel[j].y += imp * mi * ny;
+                    const float dvn = (floatVel[i].x - floatVel[j].x) * nx
+                        + (floatVel[i].y - floatVel[j].y) * ny;
+                    if (dvn > 0.f) {
+                        const float mi = ballMass[i], mj = ballMass[j];
+                        const float imp = 2.f * dvn / (mi + mj);
+                        floatVel[i].x -= imp * mj * nx;
+                        floatVel[i].y -= imp * mj * ny;
+                        floatVel[j].x += imp * mi * nx;
+                        floatVel[j].y += imp * mi * ny;
+                    }
+
+                    const float half = (minDist - dist) * 0.5f;
+                    floatOffset[i].x -= nx * half;
+                    floatOffset[i].y -= ny * half;
+                    floatOffset[j].x += nx * half;
+                    floatOffset[j].y += ny * half;
                 }
-
-                // Positional correction: push apart so they no longer overlap.
-                const float half = (minDist - dist) * 0.5f;
-                floatOffset[i].x -= nx * half;  floatOffset[i].y -= ny * half;
-                floatOffset[j].x += nx * half;  floatOffset[j].y += ny * half;
-            }
         }
     }
-    else
-    {
-        // All off: snap circles to anchor immediately.
+    else {
         for (int i = 0; i < 7; ++i)
             floatVel[i] = floatOffset[i] = {};
+    }
+
+    // Sync seekbar playhead with video current time (skip while user is dragging)
+    if (videoToggle.getToggleState() && !seekBar.isDragging()) {
+        const double dur = videoBackground.duration();
+        if (dur > 0.0) {
+            seekBar.setMaxValue(dur);
+            seekBar.setPlayhead(videoBackground.currentTime());
+        }
     }
 
     repaint();
 }
 
-void MidiVisuEditor::paint(Graphics& g)
-{
-    g.fillAll(Colours::black);
-
-    // ── Video ──────────────────────────────────────────────────────────────────
-    int srcW = 0, srcH = 0, srcStride = 0;
-    const uint8_t* srcPixels = nullptr;
-    if (videoToggle.getToggleState()
-            && videoBackground.getLatestFrame(srcW, srcH, srcStride, srcPixels))
-    {
-        if (! videoFrame.isValid() || videoFrame.getWidth() != srcW || videoFrame.getHeight() != srcH)
-            videoFrame = Image(Image::ARGB, srcW, srcH, false);
-
-        {
-            Image::BitmapData bmp(videoFrame, Image::BitmapData::writeOnly);
-            for (int row = 0; row < srcH; ++row)
-            {
-                const uint8_t* src = srcPixels + row * srcStride;
-                uint8_t*       dst = bmp.getLinePointer(row);
-                for (int col = 0; col < srcW; ++col)
-                {
-                    // Source is BGRA; JUCE Image::ARGB has the same byte layout on LE macOS.
-                    const uint8_t pb = src[col * 4 + 0];
-                    const uint8_t pg = src[col * 4 + 1];
-                    const uint8_t pr = src[col * 4 + 2];
-                    const uint8_t pa = src[col * 4 + 3];
-                    // BT.601 luma (integer, no FP per pixel)
-                    const uint8_t y = (uint8_t)((77 * pr + 150 * pg + 29 * pb) >> 8);
-                    dst[col * 4 + 0] = y;
-                    dst[col * 4 + 1] = y;
-                    dst[col * 4 + 2] = y;
-                    dst[col * 4 + 3] = pa;
-                }
-            }
-        }
-
-        if (blurToggle.getToggleState())
-        {
-            const float r = (float)blurSlider.getValue();
-            if (r > 0.0f)
-                videoFrame.getPixelData()->applyGaussianBlurEffect(r);
-        }
-
-        const float videoZoom = (float)videoZoomSlider.getValue();
-        const int destW = getWidth(), destH = getHeight();
-        const int cropW = roundToInt((float)srcW / videoZoom);
-        const int cropH = roundToInt((float)srcW * destH / ((float)destW * videoZoom));
-        const int cropX = (srcW - cropW) / 2, cropY = (srcH - cropH) / 2;
-
-        g.setOpacity((float)videoOpacitySlider.getValue());
-        g.drawImage(videoFrame, 0, 0, destW, destH, cropX, cropY, cropW, cropH);
+//==============================================================================
+void MidiVisuEditor::resized() {
+    if (logPanelOpen) {
+        const int lpad = 10;
+        logMidiNotesToggle.setBounds(lpad, 54, logPanelWidth - lpad * 2, 24);
+        logMidiClockToggle.setBounds(lpad, 80, logPanelWidth - lpad * 2, 24);
+        clearLogButton.setBounds(lpad, 112, logPanelWidth - lpad * 2, 22);
     }
 
-    // ── Circles (positions draggable) ──────────────────────────────────────────
-    g.setOpacity(1.0f);
+    if (!optionsPanelOpen) return;
 
-    for (int v = 0; v < 4; ++v)
-    {
-        const float r  = drumSmoothedRadius[v];
-        const float cx = circlePos[v].x + floatOffset[v].x;
-        const float cy = circlePos[v].y + floatOffset[v].y;
-        g.setColour(drumColours[v]);
-        g.fillEllipse(cx - r, cy - r, r * 2.0f, r * 2.0f);
-    }
-
-    for (int i = 1; i < 4; ++i)
-    {
-        const float r  = smoothedRadius[i];
-        const float cx = circlePos[3 + i].x + floatOffset[3 + i].x;
-        const float cy = circlePos[3 + i].y + floatOffset[3 + i].y;
-        g.setColour(channelColours[i]);
-        g.fillEllipse(cx - r, cy - r, r * 2.0f, r * 2.0f);
-    }
-
-    // ── Options panel background + labels (drawn above circles, below child components) ──
-    if (optionsPanelOpen)
-    {
-        const int px   = getWidth() - logPanelWidth;
-        const int pad  = 10;
-        const int rowH = 26;
-        const Font monoFont (FontOptions().withName(Font::getDefaultMonospacedFontName()).withHeight(12.0f));
-        const Font labelFont (FontOptions().withHeight(13.0f));
-
-        // Background + left border
-        g.setColour(Colour(0xf0101010));
-        g.fillRect(px, 0, logPanelWidth, getHeight());
-        g.setColour(Colour(0x50ffffff));
-        g.drawVerticalLine(px, 0.0f, (float)getHeight());
-
-        // "OPTIONS" header
-        g.setFont(labelFont);
-        g.setColour(Colours::white.withAlpha(0.9f));
-        g.drawText("OPTIONS", px + pad, 8, logPanelWidth - pad * 2, 18, Justification::left);
-        g.setColour(Colour(0x30ffffff));
-        g.drawHorizontalLine(30, (float)(px + pad), (float)(getWidth() - pad));
-
-        // "MIDI ROUTING" section
-        g.setFont(monoFont);
-        g.setColour(Colour(0x80ffffff));
-        g.drawText("MIDI ROUTING", px + pad, 66, logPanelWidth - pad * 2, 16, Justification::left);
-
-        const int firstY = 88;
-        for (int i = 0; i < 7; ++i)
-        {
-            const int rowY = firstY + i * rowH;
-            // Coloured dot
-            g.setColour(kVoiceColours[i]);
-            g.fillEllipse((float)(px + pad), (float)(rowY + 6), 10.0f, 10.0f);
-            // Voice name
-            g.setColour(Colours::white.withAlpha(0.85f));
-            g.setFont(labelFont);
-            g.drawText(kVoiceNames[i], px + pad + 14, rowY + 2, 82, 20, Justification::left);
-            // "ch" prefix before ComboBox
-            g.setColour(Colour(0x70ffffff));
-            g.setFont(monoFont);
-            g.drawText("ch", px + 92, rowY + 5, 18, 16, Justification::left);
-        }
-
-        // Divider + VIDEO section header
-        const int videoY = firstY + 7 * rowH + 20;
-        g.setColour(Colour(0x30ffffff));
-        g.drawHorizontalLine(videoY - 10, (float)(px + pad), (float)(getWidth() - pad));
-        g.setFont(monoFont);
-        g.setColour(Colour(0x80ffffff));
-        g.drawText("VIDEO", px + pad, videoY, logPanelWidth - pad * 2, 16, Justification::left);
-
-        // Sub-labels for sliders
-        g.setFont(monoFont);
-        g.setColour(Colour(0x60ffffff));
-        g.drawText("Blur radius", px + pad, videoY + 72, logPanelWidth - pad * 2, 14, Justification::left);
-        g.drawText("Zoom",        px + pad, videoY + 122, logPanelWidth - pad * 2, 14, Justification::left);
-        g.drawText("Opacity",     px + pad, videoY + 172, logPanelWidth - pad * 2, 14, Justification::left);
-
-        // Divider + CIRCLES section header
-        const int circlesY = videoY + 244;
-        g.setColour(Colour(0x30ffffff));
-        g.drawHorizontalLine(circlesY - 10, (float)(px + pad), (float)(getWidth() - pad));
-        g.setFont(monoFont);
-        g.setColour(Colour(0x80ffffff));
-        g.drawText("CIRCLES", px + pad, circlesY, logPanelWidth - pad * 2, 16, Justification::left);
-        g.setFont(monoFont);
-        g.setColour(Colour(0x60ffffff));
-        g.drawText("Size range", px + pad, circlesY + 18, logPanelWidth - pad * 2, 14, Justification::left);
-
-        // Handle position labels for the TwoValueHorizontal slider
-        {
-            const float sliderX   = (float)(px + pad);
-            const float sliderW   = (float)(logPanelWidth - pad * 2);
-            const float thumbR    = 10.f; // LookAndFeel4 thumb radius for height 28
-            const float trackW    = sliderW - 2.f * thumbR;
-            const float sMin = 5.f, sMax = 500.f, sRange = sMax - sMin;
-            const float minVal = (float)ballSizeSlider.getMinValue();
-            const float maxVal = (float)ballSizeSlider.getMaxValue();
-            const float minX = sliderX + thumbR + (minVal - sMin) / sRange * trackW;
-            const float maxX = sliderX + thumbR + (maxVal - sMin) / sRange * trackW;
-            g.setFont(monoFont);
-            g.setColour(Colours::white.withAlpha(0.8f));
-            g.drawText(String((int)minVal), (int)(minX - 15.f), circlesY + 66, 30, 14, Justification::centred, false);
-            g.drawText(String((int)maxVal), (int)(maxX - 15.f), circlesY + 66, 30, 14, Justification::centred, false);
-        }
-
-        // Divider + ANIMATION section header
-        const int animY = circlesY + 90;
-        g.setColour(Colour(0x30ffffff));
-        g.drawHorizontalLine(animY - 10, (float)(px + pad), (float)(getWidth() - pad));
-        g.setFont(monoFont);
-        g.setColour(Colour(0x80ffffff));
-        g.drawText("ANIMATION", px + pad, animY, logPanelWidth - pad * 2, 16, Justification::left);
-
-        g.setFont(monoFont);
-        g.setColour(Colour(0x60ffffff));
-        g.drawText("Clock sync",   px + pad, animY + 104, logPanelWidth - pad * 2, 14, Justification::left);
-        g.drawText("Kick amount",  px + pad, animY + 154, logPanelWidth - pad * 2, 14, Justification::left);
-        g.drawText("Intensity",    px + pad, animY + 204, logPanelWidth - pad * 2, 14, Justification::left);
-        g.drawText("Speed",        px + pad, animY + 254, logPanelWidth - pad * 2, 14, Justification::left);
-
-        // Divider above save/load buttons
-        const int btnsY = animY + 304;
-        g.setColour(Colour(0x30ffffff));
-        g.drawHorizontalLine(btnsY - 10, (float)(px + pad), (float)(getWidth() - pad));
-    }
-}
-
-void MidiVisuEditor::paintOverChildren(Graphics& g)
-{
-    // Log panel overlay (toggled with L)
-    if (logPanelOpen)
-    {
-        const int panelX = getWidth() - logPanelWidth;
-        const int panelH = getHeight();
-        const int sbW    = 6;
-        const int pad    = 8;
-        const int lineH  = 18;
-        const int visibleLines = jmax(1, (panelH - pad) / lineH);
-        const int maxOff       = jmax(0, logLines.size() - visibleLines);
-        const int offset       = jlimit(0, maxOff, logScrollOffset);
-
-        // Background
-        g.setColour(Colour(0xe8101010));
-        g.fillRect(panelX, 0, logPanelWidth, panelH);
-
-        // Left border
-        g.setColour(Colour(0x50ffffff));
-        g.drawVerticalLine(panelX, 0.0f, (float)panelH);
-
-        // Log lines (latest first, coloured by instrument)
-        g.setFont(Font(FontOptions().withName(Font::getDefaultMonospacedFontName()).withHeight(13.0f)));
-        for (int i = 0; i < visibleLines; ++i)
-        {
-            const int idx = offset + i;
-            if (idx >= logLines.size()) break;
-            g.setColour(idx < logColors.size() ? logColors[idx] : Colour(0xffcccccc));
-            g.drawText(logLines[idx],
-                       panelX + pad, pad + i * lineH,
-                       logPanelWidth - sbW - pad * 2, lineH,
-                       Justification::left, false);
-        }
-
-        // Scrollbar
-        if (logLines.size() > visibleLines)
-        {
-            const float totalH    = (float)panelH;
-            const float thumbFrac = (float)visibleLines / (float)logLines.size();
-            const float thumbH    = jmax(20.0f, thumbFrac * totalH);
-            const float thumbY    = (maxOff > 0)
-                                        ? ((float)offset / maxOff) * (totalH - thumbH)
-                                        : 0.0f;
-
-            g.setColour(Colour(0x20ffffff));
-            g.fillRect(panelX + logPanelWidth - sbW, 0, sbW, panelH);
-
-            g.setColour(Colour(0x70ffffff));
-            g.fillRoundedRectangle((float)(panelX + logPanelWidth - sbW),
-                                   thumbY, (float)sbW, thumbH, 3.0f);
-        }
-    }
-}
-
-void MidiVisuEditor::resized()
-{
-    if (! optionsPanelOpen) return;
-
-    const int px     = getWidth() - logPanelWidth;
-    const int pad    = 10;
+    const int px = getWidth() - logPanelWidth;
+    const int pad = 10;
 
     midiSettingsButton.setBounds(px + pad, 34, logPanelWidth - pad * 2, 26);
 
-    const int boxX   = px + 110;
-    const int boxW   = logPanelWidth - 110 - pad;
-    const int rowH   = 26;
+    const int boxX = px + 110;
+    const int boxW = logPanelWidth - 110 - pad;
+    const int rowH = 26;
     const int firstY = 88;
 
     for (int i = 0; i < 7; ++i)
         voiceChannelBox[i].setBounds(boxX, firstY + i * rowH + 2, boxW, 22);
 
-    const int videoY = firstY + 7 * rowH + 20;
-    videoToggle.setBounds      (px + pad, videoY + 20,  logPanelWidth - pad * 2, 26);
-    blurToggle.setBounds       (px + pad, videoY + 46,  logPanelWidth - pad * 2, 26);
-    blurSlider.setBounds       (px + pad, videoY + 86,  logPanelWidth - pad * 2, 28);
-    videoZoomSlider.setBounds  (px + pad, videoY + 136, logPanelWidth - pad * 2, 28);
-    videoOpacitySlider.setBounds(px + pad, videoY + 186, logPanelWidth - pad * 2, 28);
-    loadVideoButton.setBounds  (px + pad, videoY + 214, logPanelWidth - pad * 2, 28);
+    for (int i = 0; i < 7; ++i)
+        voiceNameLabel[i].setBounds(px + pad + 14, firstY + i * rowH + 2, 82, 20);
 
-    const int circlesY = videoY + 244;
-    ballSizeSlider.setBounds(px + pad, circlesY + 34, logPanelWidth - pad * 2, 28);
+    const int videoY = firstY + 7 * rowH + StyleTokens::kSectionGap;
+
+    // Seekbar at top of VIDEO section
+    seekBar.setBounds(px + pad, videoY + 18, logPanelWidth - pad * 2,
+                      SeekBar::kBarHeight);
+
+    // Play/Stop buttons below time label
+    const int halfW = (logPanelWidth - pad * 3) / 2;
+    videoPlayPauseButton.setBounds(px + pad, videoY + 62, halfW,
+                                   StyleTokens::kButtonHeight);
+    videoStopButton.setBounds(px + pad * 2 + halfW, videoY + 62, halfW,
+                              StyleTokens::kButtonHeight);
+
+    // Toggles and sliders below buttons
+    const int ctrlY = videoY + 96;
+    videoToggle.setBounds(px + pad, ctrlY, logPanelWidth - pad * 2,
+                          StyleTokens::kRowHeight);
+    blurToggle.setBounds(px + pad, ctrlY + 26, logPanelWidth - pad * 2,
+                         StyleTokens::kRowHeight);
+    blurSlider.setBounds(px + pad, ctrlY + 70, logPanelWidth - pad * 2,
+                         StyleTokens::kSliderHeight);
+    videoZoomSlider.setBounds(px + pad, ctrlY + 124, logPanelWidth - pad * 2,
+                              StyleTokens::kSliderHeight);
+    videoOpacitySlider.setBounds(px + pad, ctrlY + 178, logPanelWidth - pad * 2,
+                                 StyleTokens::kSliderHeight);
+
+    // File list is custom-drawn; circles section below it
+    const int filesY = ctrlY + 210;
+    const int circlesY = filesY + 76;
+    ballSizeSlider.setBounds(px + pad, circlesY + 34, logPanelWidth - pad * 2,
+                             StyleTokens::kSliderHeight);
 
     const int animY = circlesY + 90;
-    floatToggle.setBounds              (px + pad, animY + 20,  logPanelWidth - pad * 2, 26);
-    collisionToggle.setBounds          (px + pad, animY + 46,  logPanelWidth - pad * 2, 26);
-    clockKickToggle.setBounds          (px + pad, animY + 72,  logPanelWidth - pad * 2, 26);
-    clockDivisionBox.setBounds         (px + pad, animY + 118, logPanelWidth - pad * 2, 24);
-    clockKickIntensitySlider.setBounds (px + pad, animY + 168, logPanelWidth - pad * 2, 28);
-    floatIntensitySlider.setBounds     (px + pad, animY + 218, logPanelWidth - pad * 2, 28);
-    floatSpeedSlider.setBounds         (px + pad, animY + 268, logPanelWidth - pad * 2, 28);
+    floatToggle.setBounds(px + pad, animY + 20, logPanelWidth - pad * 2,
+                          StyleTokens::kRowHeight);
+    collisionToggle.setBounds(px + pad, animY + 46, logPanelWidth - pad * 2,
+                              StyleTokens::kRowHeight);
+    clockKickToggle.setBounds(px + pad, animY + 72, logPanelWidth - pad * 2,
+                              StyleTokens::kRowHeight);
+    clockDivisionBox.setBounds(px + pad, animY + 118, logPanelWidth - pad * 2, 24);
+    clockKickIntensitySlider.setBounds(px + pad, animY + 168, logPanelWidth - pad * 2,
+                                       StyleTokens::kSliderHeight);
+    floatIntensitySlider.setBounds(px + pad, animY + 218, logPanelWidth - pad * 2,
+                                   StyleTokens::kSliderHeight);
+    floatSpeedSlider.setBounds(px + pad, animY + 268, logPanelWidth - pad * 2,
+                               StyleTokens::kSliderHeight);
 
     const int btnsY = animY + 304;
-    const int btnW  = (logPanelWidth - pad * 3) / 2;
-    saveDefaultButton.setBounds  (px + pad,            btnsY,      logPanelWidth - pad * 2, 28);
-    savePositionsButton.setBounds(px + pad,            btnsY + 34, btnW, 28);
-    loadPositionsButton.setBounds(px + pad * 2 + btnW, btnsY + 34, btnW, 28);
+    const int btnW = (logPanelWidth - pad * 3) / 2;
+    saveDefaultButton.setBounds(px + pad, btnsY, logPanelWidth - pad * 2,
+                                StyleTokens::kSliderHeight);
+    savePositionsButton.setBounds(px + pad, btnsY + 34, btnW, StyleTokens::kSliderHeight);
+    loadPositionsButton.setBounds(px + pad * 2 + btnW, btnsY + 34, btnW,
+                                  StyleTokens::kSliderHeight);
 }
 
-bool MidiVisuEditor::keyPressed(const KeyPress& key)
-{
-    if (key == KeyPress::escapeKey)
-    {
-        if (auto* peer = getPeer())
-        {
-            peer->setFullScreen(false);
-            setSize(1920, 1080);
-        }
-        return true;
-    }
-
-    if (key == KeyPress('f', ModifierKeys::noModifiers, 0))
-    {
-        if (auto* peer = getPeer())
-            peer->setFullScreen(!peer->isFullScreen());
-        return true;
-    }
-
-    if (key == KeyPress('b', ModifierKeys::noModifiers, 0))
-    {
-        blurToggle.setToggleState(!blurToggle.getToggleState(), dontSendNotification);
-        repaint();
-        return true;
-    }
-
-    if (key == KeyPress('o', ModifierKeys::noModifiers, 0))
-    {
-        optionsPanelOpen = !optionsPanelOpen;
-        for (auto& box : voiceChannelBox) box.setVisible(optionsPanelOpen);
-        videoToggle.setVisible(optionsPanelOpen);
-        blurToggle.setVisible(optionsPanelOpen);
-        blurSlider.setVisible(optionsPanelOpen);
-        videoZoomSlider.setVisible(optionsPanelOpen);
-        videoOpacitySlider.setVisible(optionsPanelOpen);
-        saveDefaultButton.setVisible(optionsPanelOpen);
-        savePositionsButton.setVisible(optionsPanelOpen);
-        loadPositionsButton.setVisible(optionsPanelOpen);
-        loadVideoButton.setVisible(optionsPanelOpen);
-        midiSettingsButton.setVisible(optionsPanelOpen);
-        ballSizeSlider.setVisible(optionsPanelOpen);
-        floatToggle.setVisible(optionsPanelOpen);
-        collisionToggle.setVisible(optionsPanelOpen);
-        clockKickToggle.setVisible(optionsPanelOpen);
-        clockDivisionBox.setVisible(optionsPanelOpen);
-        clockKickIntensitySlider.setVisible(optionsPanelOpen);
-        floatIntensitySlider.setVisible(optionsPanelOpen);
-        floatSpeedSlider.setVisible(optionsPanelOpen);
-        if (optionsPanelOpen)
-            resized();
-        repaint();
-        return true;
-    }
-
-    if (key == KeyPress('l', ModifierKeys::noModifiers, 0))
-    {
-        logPanelOpen    = !logPanelOpen;
-        logScrollOffset = 0;
-        repaint();
-        return true;
-    }
-
-    return false;
+//==============================================================================
+void MidiVisuEditor::seekBarLoopChanged(SeekBar* bar) {
+    videoBackground.setLoopPoints(bar->getLoopStart(), bar->getLoopEnd());
 }
 
-void MidiVisuEditor::showJuceAudioSettings()
-{
+void MidiVisuEditor::seekBarPlayheadDragged(SeekBar* bar) {
+    videoBackground.seek(bar->getPlayhead());
+}
+
+//==============================================================================
+void MidiVisuEditor::showJuceAudioSettings() {
 #if JUCE_STANDALONE_APPLICATION
-    if (auto* holder = StandalonePluginHolder::getInstance())
-    {
+    if (auto* holder = StandalonePluginHolder::getInstance()) {
         auto* selector = new AudioDeviceSelectorComponent(
             holder->deviceManager,
             0, 0, 0, 0,
@@ -924,59 +865,12 @@ void MidiVisuEditor::showJuceAudioSettings()
 
         DialogWindow::LaunchOptions opts;
         opts.content.setOwned(selector);
-        opts.dialogTitle                  = "Audio / MIDI Settings";
-        opts.dialogBackgroundColour       = Colour(0xff1a1a1a);
+        opts.dialogTitle = "Audio / MIDI Settings";
+        opts.dialogBackgroundColour = styleManager.dialogBackground();
         opts.escapeKeyTriggersCloseButton = true;
-        opts.useNativeTitleBar            = true;
-        opts.resizable                    = true;
+        opts.useNativeTitleBar = true;
+        opts.resizable = true;
         opts.launchAsync();
     }
 #endif
-}
-
-// ── Circle drag ───────────────────────────────────────────────────────────────
-void MidiVisuEditor::mouseDown(const MouseEvent& e)
-{
-    draggedCircle = -1;
-    for (int i = 6; i >= 0; --i)
-    {
-        const float minR_ = (float)ballSizeSlider.getMinValue();
-        const float r     = (i < 4) ? jmax(minR_, drumSmoothedRadius[i])
-                                    : jmax(minR_, smoothedRadius[i - 3]);
-        const float hitR = jmax(r, 30.0f);
-        if (e.position.getDistanceFrom(circlePos[i] + floatOffset[i]) <= hitR)
-        {
-            draggedCircle = i;
-            dragOffset    = circlePos[i] - e.position;
-            break;
-        }
-    }
-}
-
-void MidiVisuEditor::mouseDrag(const MouseEvent& e)
-{
-    if (draggedCircle < 0) return;
-    circlePos[draggedCircle] = e.position + dragOffset;
-    repaint();
-}
-
-void MidiVisuEditor::mouseUp(const MouseEvent& /*e*/)
-{
-    if (draggedCircle >= 0)
-        writePositionsToFile(getAutoSaveFile());
-    draggedCircle = -1;
-}
-
-void MidiVisuEditor::mouseWheelMove(const MouseEvent& e, const MouseWheelDetails& w)
-{
-    if (! logPanelOpen) return;
-    if (e.x < getWidth() - logPanelWidth) return;
-
-    const int lineH        = 18;
-    const int visibleLines = jmax(1, getHeight() / lineH);
-    const int maxOff       = jmax(0, logLines.size() - visibleLines);
-
-    logScrollOffset -= roundToInt(w.deltaY * 30.0f);
-    logScrollOffset  = jlimit(0, maxOff, logScrollOffset);
-    repaint();
 }
