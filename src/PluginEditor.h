@@ -19,15 +19,12 @@
 #include "SeekBar.h"
 #include "OptionsPanelLayout.h"
 
-class InvertedSlider : public Slider {
+class PassthroughComboBox : public ComboBox {
 public:
-    using Slider::Slider;
+    using ComboBox::ComboBox;
     void mouseWheelMove(const MouseEvent& e,
                         const MouseWheelDetails& w) override {
-        if (!isMouseButtonDown()) return;
-        auto reversed = w;
-        reversed.deltaY = -reversed.deltaY;
-        Slider::mouseWheelMove(e, reversed);
+        Component::mouseWheelMove(e, w);
     }
 };
 
@@ -106,8 +103,8 @@ private:
     bool optionsPanelOpen = false;
     String voiceNames[7];
     Label voiceNameLabel[7];
-    ComboBox voiceChannelBox[7];
-    ComboBox clockDivisionBox;
+    PassthroughComboBox voiceChannelBox[7];
+    PassthroughComboBox clockDivisionBox;
     ToggleButton videoToggle{"Video"};
     ToggleButton blurToggle{"Blur"};
     ToggleButton floatToggle{"Floating"};
@@ -117,13 +114,13 @@ private:
     ToggleButton logMidiClockToggle{"MIDI clock"};
     TextButton clearLogButton{"Clear"};
 
-    InvertedSlider blurSlider;
-    InvertedSlider videoZoomSlider;
-    InvertedSlider videoOpacitySlider;
+    Slider blurSlider;
+    Slider videoZoomSlider;
+    Slider videoOpacitySlider;
     RangeSlider ballSizeSlider;
-    InvertedSlider floatIntensitySlider;
-    InvertedSlider floatSpeedSlider;
-    InvertedSlider clockKickIntensitySlider;
+    Slider floatIntensitySlider;
+    Slider floatSpeedSlider;
+    Slider clockKickIntensitySlider;
     TextButton saveDefaultButton{"Save Settings"};
     TextButton savePositionsButton{"Save Settings to..."};
     TextButton loadPositionsButton{"Load"};

@@ -3,6 +3,7 @@
 
 RangeSlider::RangeSlider() {
     setSliderStyle(juce::Slider::TwoValueHorizontal);
+    setScrollWheelEnabled(false);
     setColour(juce::Slider::backgroundColourId,
               juce::Colour(StyleTokens::kRangeSliderBg));
     setColour(juce::Slider::trackColourId, juce::Colour(StyleTokens::kRangeSliderTrack));
@@ -49,12 +50,4 @@ void RangeSlider::mouseUp(const juce::MouseEvent& e) {
     else {
         juce::Slider::mouseUp(e);
     }
-}
-
-void RangeSlider::mouseWheelMove(const juce::MouseEvent& e,
-                                 const juce::MouseWheelDetails& w) {
-    if (!isMouseButtonDown()) return;
-    auto reversed = w;
-    reversed.deltaY = -reversed.deltaY;
-    juce::Slider::mouseWheelMove(e, reversed);
 }

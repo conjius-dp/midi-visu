@@ -125,7 +125,7 @@ void InteractionManager::mouseWheelMove(const MouseEvent& e,
             }
 
             // Options panel scroll
-            editor.optionsLayout.scrollBy(-roundToInt(w.deltaY * 40.0f));
+            editor.optionsLayout.scrollBy(-roundToInt(w.deltaY * 200.0f));
             editor.resized();
             editor.repaint();
             return;
@@ -206,6 +206,25 @@ bool InteractionManager::keyPressed(const KeyPress& key) const {
 
         editor.resized();
         editor.repaint();
+        return true;
+    }
+
+    if (key == KeyPress('s', ModifierKeys::commandModifier, 0)) {
+        editor.writePositionsToFile(editor.getAutoSaveFile());
+        editor.appendLog("Settings saved", editor.styleManager.logInfo());
+        editor.repaint();
+        return true;
+    }
+
+    if (key == KeyPress('s', ModifierKeys::commandModifier
+                             | ModifierKeys::shiftModifier, 0)) {
+        editor.savePositions();
+        return true;
+    }
+
+    if (key == KeyPress('l', ModifierKeys::commandModifier, 0)
+        || key == KeyPress('o', ModifierKeys::commandModifier, 0)) {
+        editor.loadPositions();
         return true;
     }
 

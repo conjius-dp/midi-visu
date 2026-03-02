@@ -210,12 +210,15 @@ MidiVisuEditor::MidiVisuEditor(MidivisuAudioProcessor& p)
                          Colour(StyleTokens::kButtonBgOn));
     addChildComponent(loopButton);
 
-    // Apply dark theme to all JUCE controls.
+    // Disable scroll-wheel on all sliders so events bubble to the panel scroller.
     for (auto* s : {
              &blurSlider, &videoZoomSlider, &videoOpacitySlider,
              &clockKickIntensitySlider, &floatIntensitySlider, &floatSpeedSlider
-         })
+         }) {
+        s->setScrollWheelEnabled(false);
         styleManager.applyToSlider(*s);
+    }
+    ballSizeSlider.setScrollWheelEnabled(false);
 
     for (auto* b : {
              &videoToggle, &blurToggle, &floatToggle, &collisionToggle, &clockKickToggle
@@ -789,9 +792,11 @@ void MidiVisuEditor::timerCallback() {
             if (pendingLoopStart_ >= 0.0) {
                 seekBar.setLoopStart(pendingLoopStart_);
                 seekBar.setLoopEnd(pendingLoopEnd_);
-                if (seekBar.isLoopEnabled())
+                if (seekBar.isLoopEnabled()) {
                     videoBackground.setLoopPoints(pendingLoopStart_,
                                                   pendingLoopEnd_);
+                    videoBackground.seek(pendingLoopStart_);
+                }
                 pendingLoopStart_ = -1.0;
                 pendingLoopEnd_ = -1.0;
             }

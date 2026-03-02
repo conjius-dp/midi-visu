@@ -8,12 +8,11 @@ public:
     SeekBar();
 
     void paint(Graphics& g) override;
+    void paintOverChildren(Graphics& g) override;
     void resized() override;
     void mouseDown(const MouseEvent& e) override;
     void mouseDrag(const MouseEvent& e) override;
     void mouseUp(const MouseEvent& e) override;
-    void mouseWheelMove(const MouseEvent& e,
-                        const MouseWheelDetails& w) override;
 
     void setMaxValue(double maxSec);
     void setPlayhead(double sec);

@@ -94,12 +94,6 @@ void SeekBar::paint(Graphics& g) {
     if (maxVal <= 0.0)
         return;
 
-    // Elapsed fill (0 to playhead)
-    const float phPx = RangeSliderLogic::valueToPixel(
-        logic.playhead(), 0.0, maxVal, ts, tw);
-    g.setColour(Colour(StyleTokens::kSeekBarPlayhead).withAlpha(0.45f));
-    g.fillRoundedRectangle(ts, trackY, phPx - ts, trackH, 2.0f);
-
     // Loop region highlight
     const float lsPx = RangeSliderLogic::valueToPixel(
         logic.loopStart(), 0.0, maxVal, ts, tw);
@@ -112,11 +106,6 @@ void SeekBar::paint(Graphics& g) {
 
     // Loop handles are drawn by loopSlider_ (JUCE blue thumbs)
 
-    // Playhead handle (white, drawn on top)
-    g.setColour(Colour(StyleTokens::kSeekBarPlayhead));
-    g.fillEllipse(phPx - kThumbRadius, trackCY - kThumbRadius,
-                  kThumbRadius * 2.0f, kThumbRadius * 2.0f);
-
     // Loop time labels below the track area
     const auto labelCol = Colour(StyleTokens::kSeekBarTime);
     g.setColour(loopEnabled_ ? labelCol : labelCol.withMultipliedAlpha(0.3f));
@@ -128,6 +117,34 @@ void SeekBar::paint(Graphics& g) {
                Justification::centred, false);
     g.drawText(leText, static_cast<int>(lePx - 18), labelY, 36, kLabelHeight,
                Justification::centred, false);
+}
+
+void SeekBar::paintOverChildren(Graphics& g) {
+    const double maxVal = logic.maxValue();
+    if (maxVal <= 0.0) return;
+
+    const float ts = getTrackStart();
+    const float tw = getTrackWidth();
+    const float trackCY = static_cast<float>(kTrackAreaHeight) * 0.5f;
+    const float trackY = trackCY - 2.0f;
+    const float trackH = 4.0f;
+
+    // Elapsed fill: from loopStart when looping, from 0 when not
+    const double fillStart = loopEnabled_ ? logic.loopStart() : 0.0;
+    const float fillStartPx = RangeSliderLogic::valueToPixel(
+        fillStart, 0.0, maxVal, ts, tw);
+    const float phPx = RangeSliderLogic::valueToPixel(
+        logic.playhead(), 0.0, maxVal, ts, tw);
+    if (phPx > fillStartPx) {
+        g.setColour(Colour(StyleTokens::kSeekBarPlayhead).withAlpha(0.45f));
+        g.fillRoundedRectangle(fillStartPx, trackY,
+                               phPx - fillStartPx, trackH, 2.0f);
+    }
+
+    // Playhead handle (white, on top of everything)
+    g.setColour(Colour(StyleTokens::kSeekBarPlayhead));
+    g.fillEllipse(phPx - kThumbRadius, trackCY - kThumbRadius,
+                  kThumbRadius * 2.0f, kThumbRadius * 2.0f);
 }
 
 void SeekBar::mouseDown(const MouseEvent& e) {
@@ -173,14 +190,4 @@ void SeekBar::mouseDrag(const MouseEvent& e) {
 
 void SeekBar::mouseUp(const MouseEvent&) {
     activeHandle = MultiHandleSliderLogic::HandleType::None;
-}
-
-void SeekBar::mouseWheelMove(const MouseEvent&, const MouseWheelDetails& w) {
-    if (!isMouseButtonDown()) return;
-    if (logic.maxValue() <= 0.0) return;
-    const double interval = logic.maxValue() / 100.0;
-    const double delta = interval * w.deltaY * (w.isSmooth ? 1.0 : 10.0);
-    logic.setPlayhead(logic.playhead() + delta);
-    listeners.call([this](Listener& l) { l.seekBarPlayheadDragged(this); });
-    repaint();
 }
