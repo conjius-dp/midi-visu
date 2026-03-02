@@ -17,6 +17,38 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Read version and bump patch
+        id: version
+        run: |
+          # Read current version from CMakeLists.txt
+          CURRENT=$(grep -oP '(?<=project\(midi-visu VERSION )\d+\.\d+\.\d+' CMakeLists.txt)
+          MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+          MINOR=$(echo "$CURRENT" | cut -d. -f2)
+          PATCH=$(echo "$CURRENT" | cut -d. -f3)
+
+          # Bump patch
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+
+          # Update CMakeLists.txt
+          sed -i '' "s/project(midi-visu VERSION ${CURRENT})/project(midi-visu VERSION ${NEW_VERSION})/" CMakeLists.txt
+
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CMakeLists.txt
+          git commit -m "Bump version to ${{ steps.version.outputs.tag }}"
+          git push
+
+      - name: Tag release
+        run: |
+          git tag ${{ steps.version.outputs.tag }}
+          git push origin ${{ steps.version.outputs.tag }}
+
       - name: Cache JUCE
         id: cache-juce
         uses: actions/cache@v4
@@ -39,15 +71,6 @@ jobs:
       - name: Build VST3
         run: cmake --build cmake-build-release --target midi-visu_VST3 --config Release
 
-      - name: Generate version tag
-        id: version
-        run: |
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          DATE=$(date +%Y%m%d)
-          TAG="v${DATE}-${SHORT_SHA}"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "name=midi-visu $TAG" >> "$GITHUB_OUTPUT"
-
       - name: Zip Standalone
         run: |
           cd cmake-build-release/midi-visu_artefacts/Release/Standalone
@@ -62,10 +85,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: ${{ steps.version.outputs.name }}
+          name: midi-visu ${{ steps.version.outputs.tag }}
           body: |
-            Automated release from commit ${{ github.sha }}.
-
             **Artifacts:**
             - `midi-visu-Standalone.zip` — macOS standalone app
             - `midi-visu-VST3.zip` — VST3 plugin
