@@ -1,5 +1,8 @@
 # midi-visu
 
+[![CI](https://github.com/conjius/midi-visu/actions/workflows/ci.yml/badge.svg)](https://github.com/conjius/midi-visu/actions/workflows/ci.yml)
+[![Pages](https://img.shields.io/badge/GitHub%20Pages-live-32cd32)](https://conjius.github.io/midi-visu/)
+
 A real-time MIDI visualizer built as a JUCE audio plugin. Receives MIDI input and renders
 animated circles — one per voice — with drum hit-counter animations, video backgrounds,
 and a configurable options panel. Runs as a standalone app or as a VST3/AU plugin.
