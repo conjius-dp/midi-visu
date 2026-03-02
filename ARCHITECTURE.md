@@ -1,5 +1,34 @@
 # midi-visu — Architecture Notes
 
+## Project Structure
+
+```
+src/
+├── PluginProcessor.h/cpp          Audio processor and MIDI routing
+├── PluginEditor.h/cpp             UI editor with timer-driven paint loop
+├── VoiceManager.h/cpp             Channel assignment and note matching
+├── MidiManager.h/cpp              MIDI atomic state and processBlock logic
+├── UiManager.h/cpp                All painting and rendering
+├── InteractionManager.h/cpp       Mouse and keyboard input handling
+├── StyleManager.h/cpp             JUCE colour/font accessors and control styling
+├── StyleTokens.h                  Visual style constants (colours, font sizes)
+├── AppConstants.h                 Shared voice colours and display names
+├── VideoBackground.h/mm           AVFoundation video decoder (Obj-C++)
+├── VideoListManager.h/cpp         Video file list, selection, and play state
+├── RangeSlider.h/cpp              Two-handle horizontal range slider widget
+├── RangeSliderLogic.h/cpp         Pure math for range slider hit-testing and dragging
+├── SeekBar.h/cpp                  Video timeline with loop and playhead handles
+└── MultiHandleSliderLogic.h/cpp   Pure math for three-handle slider
+tests/
+├── main.cpp                       Test runner entry point
+├── VoiceManagerTests.cpp          VoiceManager unit tests
+├── MidiManagerTests.cpp           MidiManager unit tests
+├── RangeSliderLogicTests.cpp      RangeSliderLogic unit tests
+├── StyleTokensTests.cpp           StyleTokens unit tests
+├── VideoListManagerTests.cpp      VideoListManager unit tests
+└── MultiHandleSliderLogicTests.cpp MultiHandleSliderLogic unit tests
+```
+
 ## Class Descriptions and Dependencies
 
 ### Audio Thread

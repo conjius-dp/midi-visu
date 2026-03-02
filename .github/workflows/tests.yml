@@ -1,4 +1,4 @@
-name: Standalone
+name: Tests
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  build:
+  test:
     runs-on: macos-latest
 
     steps:
@@ -30,5 +30,8 @@ jobs:
       - name: Configure
         run: cmake -B cmake-build-debug -DCMAKE_BUILD_TYPE=Debug
 
-      - name: Build standalone
-        run: cmake --build cmake-build-debug --target midi-visu_Standalone
+      - name: Build tests
+        run: cmake --build cmake-build-debug --target midi-visu-tests
+
+      - name: Run tests
+        run: cd cmake-build-debug && ctest --output-on-failure

@@ -1,6 +1,8 @@
 # midi-visu
 
-[![CI](https://github.com/conjius/midi-visu/actions/workflows/ci.yml/badge.svg)](https://github.com/conjius/midi-visu/actions/workflows/ci.yml)
+[![Standalone](https://github.com/conjius/midi-visu/actions/workflows/ci.yml/badge.svg)](https://github.com/conjius/midi-visu/actions/workflows/ci.yml)
+[![VST3](https://github.com/conjius/midi-visu/actions/workflows/vst3.yml/badge.svg)](https://github.com/conjius/midi-visu/actions/workflows/vst3.yml)
+[![Tests](https://github.com/conjius/midi-visu/actions/workflows/tests.yml/badge.svg)](https://github.com/conjius/midi-visu/actions/workflows/tests.yml)
 [![Pages](https://img.shields.io/badge/GitHub%20Pages-live-32cd32)](https://conjius.github.io/midi-visu/)
 
 A real-time MIDI visualizer built as a JUCE audio plugin. Receives MIDI input and renders
@@ -59,33 +61,7 @@ Circles can be repositioned by dragging them with the mouse.
 
 Channel assignments are configurable via the options panel.
 
-## Project Structure
-
-```
-src/
-├── PluginProcessor.h/cpp      Audio processor and MIDI routing
-├── PluginEditor.h/cpp         UI editor with timer-driven paint loop
-├── VoiceManager.h/cpp         Channel assignment and note matching
-├── MidiManager.h/cpp          MIDI atomic state and processBlock logic
-├── DrawManager.h/cpp          All painting and rendering
-├── InteractionManager.h/cpp   Mouse and keyboard input handling
-├── StyleManager.h/cpp         JUCE colour/font accessors and control styling
-├── StyleTokens.h              Visual style constants (colours, font sizes)
-├── AppConstants.h             Shared voice colours and display names
-├── VideoBackground.h/mm       AVFoundation video decoder (Obj-C++)
-├── VideoListManager.h/cpp     Video file list, selection, and play state
-├── RangeSlider.h/cpp          Two-handle horizontal range slider widget
-└── RangeSliderLogic.h/cpp     Pure math for range slider hit-testing and dragging
-tests/
-├── main.cpp                   Test runner entry point
-├── VoiceManagerTests.cpp      VoiceManager unit tests
-├── MidiManagerTests.cpp       MidiManager unit tests
-├── RangeSliderLogicTests.cpp  RangeSliderLogic unit tests
-├── StyleTokensTests.cpp       StyleTokens unit tests
-└── VideoListManagerTests.cpp  VideoListManager unit tests
-```
-
-For detailed class descriptions, dependencies, and implementation patterns, see
+For project structure, class descriptions, dependencies, and implementation patterns, see
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## License
