@@ -1,0 +1,111 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage.info - src/VideoListManager.h</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../index.html" title="Click to go to top-level">top level</a> - <a href="index.html" title="Click to go to directory src">src</a> - VideoListManager.h<span style="font-size: 80%;"> (source / <a href="VideoListManager.h.func-c.html" title="Click to go to function table">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">3</td>
+            <td class="headerCovTableEntry">3</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-03-03 00:13:40</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">9</td>
+            <td class="headerCovTableEntry">9</td>
+          </tr>
+                  <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">            Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>              : #pragma once</span>
+<span id="L2"><span class="lineNum">       2</span>              : #include &lt;string&gt;</span>
+<span id="L3"><span class="lineNum">       3</span>              : #include &lt;vector&gt;</span>
+<span id="L4"><span class="lineNum">       4</span>              : </span>
+<span id="L5"><span class="lineNum">       5</span>              : // Pure C++ (no JUCE) — manages the video file list, selection, and play state.</span>
+<span id="L6"><span class="lineNum">       6</span>              : // All methods are UI-thread-only; no synchronization needed.</span>
+<span id="L7"><span class="lineNum">       7</span> <span class="tlaGNC">          15 : class VideoListManager {</span></span>
+<span id="L8"><span class="lineNum">       8</span>              : public:</span>
+<span id="L9"><span class="lineNum">       9</span>              :     enum class PlayState { Stopped, Playing, Paused };</span>
+<span id="L10"><span class="lineNum">      10</span>              : </span>
+<span id="L11"><span class="lineNum">      11</span>              :     struct FileEntry {</span>
+<span id="L12"><span class="lineNum">      12</span>              :         std::string filename;</span>
+<span id="L13"><span class="lineNum">      13</span>              :         double durationSec = 0.0;</span>
+<span id="L14"><span class="lineNum">      14</span>              :     };</span>
+<span id="L15"><span class="lineNum">      15</span>              : </span>
+<span id="L16"><span class="lineNum">      16</span>              :     // Replace the file list. Clears selectedIndex if it would be out of range.</span>
+<span id="L17"><span class="lineNum">      17</span>              :     void setFiles(const std::vector&lt;FileEntry&gt;&amp; entries);</span>
+<span id="L18"><span class="lineNum">      18</span>              : </span>
+<span id="L19"><span class="lineNum">      19</span>              :     int fileCount() const;</span>
+<span id="L20"><span class="lineNum">      20</span>              :     const std::string&amp; filename(int i) const; // asserts valid index</span>
+<span id="L21"><span class="lineNum">      21</span>              :     double duration(int i) const; // asserts valid index</span>
+<span id="L22"><span class="lineNum">      22</span>              : </span>
+<span id="L23"><span class="lineNum">      23</span>              :     int selectedIndex() const;</span>
+<span id="L24"><span class="lineNum">      24</span>              :     void setSelectedIndex(int idx); // negative → -1; ≥ count → clamped to last</span>
+<span id="L25"><span class="lineNum">      25</span>              : </span>
+<span id="L26"><span class="lineNum">      26</span>              :     PlayState playState() const;</span>
+<span id="L27"><span class="lineNum">      27</span>              :     void setPlayState(PlayState s);</span>
+<span id="L28"><span class="lineNum">      28</span>              : </span>
+<span id="L29"><span class="lineNum">      29</span>              :     bool isPlaying() const; // true iff playState == Playing</span>
+<span id="L30"><span class="lineNum">      30</span>              : </span>
+<span id="L31"><span class="lineNum">      31</span>              : private:</span>
+<span id="L32"><span class="lineNum">      32</span>              :     std::vector&lt;FileEntry&gt; files_;</span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">          15 :     int selectedIndex_ = -1;</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">          15 :     PlayState playState_ = PlayState::Stopped;</span></span>
+<span id="L35"><span class="lineNum">      35</span>              : };</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.4-0</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

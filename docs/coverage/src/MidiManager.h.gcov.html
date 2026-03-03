@@ -1,0 +1,116 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage.info - src/MidiManager.h</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../index.html" title="Click to go to top-level">top level</a> - <a href="index.html" title="Click to go to directory src">src</a> - MidiManager.h<span style="font-size: 80%;"> (source / <a href="MidiManager.h.func-c.html" title="Click to go to function table">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">1</td>
+            <td class="headerCovTableEntry">1</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-03-03 00:13:40</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">2</td>
+            <td class="headerCovTableEntry">2</td>
+          </tr>
+                  <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">            Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>              : /*</span>
+<span id="L2"><span class="lineNum">       2</span>              :   ==============================================================================</span>
+<span id="L3"><span class="lineNum">       3</span>              :     MidiManager — owns all MIDI atomic state and processBlock logic.</span>
+<span id="L4"><span class="lineNum">       4</span>              :   ==============================================================================</span>
+<span id="L5"><span class="lineNum">       5</span>              : */</span>
+<span id="L6"><span class="lineNum">       6</span>              : </span>
+<span id="L7"><span class="lineNum">       7</span>              : #pragma once</span>
+<span id="L8"><span class="lineNum">       8</span>              : #include &lt;JuceHeader.h&gt;</span>
+<span id="L9"><span class="lineNum">       9</span>              : #include &lt;atomic&gt;</span>
+<span id="L10"><span class="lineNum">      10</span>              : #include &lt;set&gt;</span>
+<span id="L11"><span class="lineNum">      11</span>              : #include &quot;VoiceManager.h&quot;</span>
+<span id="L12"><span class="lineNum">      12</span>              : </span>
+<span id="L13"><span class="lineNum">      13</span> <span class="tlaGNC">           7 : class MidiManager {</span></span>
+<span id="L14"><span class="lineNum">      14</span>              : public:</span>
+<span id="L15"><span class="lineNum">      15</span>              :     explicit MidiManager(VoiceManager&amp; voiceManager);</span>
+<span id="L16"><span class="lineNum">      16</span>              : </span>
+<span id="L17"><span class="lineNum">      17</span>              :     // Call from AudioProcessor::processBlock — audio thread only.</span>
+<span id="L18"><span class="lineNum">      18</span>              :     void processBlock(MidiBuffer&amp; midiMessages);</span>
+<span id="L19"><span class="lineNum">      19</span>              : </span>
+<span id="L20"><span class="lineNum">      20</span>              :     // ── Shared atomic state — written on audio thread, read on UI thread ──────</span>
+<span id="L21"><span class="lineNum">      21</span>              :     std::atomic&lt;int&gt; drumVoiceHitCount[4]{0, 0, 0, 0};</span>
+<span id="L22"><span class="lineNum">      22</span>              : </span>
+<span id="L23"><span class="lineNum">      23</span>              :     // Raw drum tracking: fires on ANY matched drum note-on, for logging.</span>
+<span id="L24"><span class="lineNum">      24</span>              :     std::atomic&lt;int&gt; ch10RawHitCount{0};</span>
+<span id="L25"><span class="lineNum">      25</span>              :     std::atomic&lt;int&gt; ch10RawHitNote{-1};</span>
+<span id="L26"><span class="lineNum">      26</span>              : </span>
+<span id="L27"><span class="lineNum">      27</span>              :     // Note-on event log for melodic tracks (indices 1-3).</span>
+<span id="L28"><span class="lineNum">      28</span>              :     std::atomic&lt;int&gt; channelNoteOnCount[4]{0, 0, 0, 0};</span>
+<span id="L29"><span class="lineNum">      29</span>              :     std::atomic&lt;int&gt; channelNoteOnNote[4]{-1, -1, -1, -1};</span>
+<span id="L30"><span class="lineNum">      30</span>              : </span>
+<span id="L31"><span class="lineNum">      31</span>              :     // Highest active MIDI note per melodic track (indices 1-3), -1 = none.</span>
+<span id="L32"><span class="lineNum">      32</span>              :     std::atomic&lt;int&gt; channelHighestNote[4]{-1, -1, -1, -1};</span>
+<span id="L33"><span class="lineNum">      33</span>              : </span>
+<span id="L34"><span class="lineNum">      34</span>              :     // MIDI clock: counts every incoming clock pulse (24 per quarter note).</span>
+<span id="L35"><span class="lineNum">      35</span>              :     std::atomic&lt;int&gt; midiClockPulse{0};</span>
+<span id="L36"><span class="lineNum">      36</span>              : </span>
+<span id="L37"><span class="lineNum">      37</span>              : private:</span>
+<span id="L38"><span class="lineNum">      38</span>              :     VoiceManager&amp; voiceManager;</span>
+<span id="L39"><span class="lineNum">      39</span>              :     std::set&lt;int&gt; activeNotes[4]; // audio-thread only; indices 1–3 used</span>
+<span id="L40"><span class="lineNum">      40</span>              : };</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.4-0</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>
