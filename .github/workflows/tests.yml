@@ -43,10 +43,10 @@ jobs:
         run: |
           brew install lcov
           lcov --capture --directory cmake-build-debug --output-file coverage.info \
-               --ignore-errors inconsistent
+               --ignore-errors inconsistent,format,count
           lcov --remove coverage.info '*/JUCE/*' '*/tests/*' '/usr/*' \
-               --output-file coverage.info --ignore-errors unused
-          lcov --list coverage.info
+               --output-file coverage.info --ignore-errors unused,inconsistent,format
+          lcov --list coverage.info --ignore-errors inconsistent,format
 
       - name: Update coverage badge
         if: github.ref == 'refs/heads/main'
