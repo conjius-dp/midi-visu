@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   test:
     runs-on: macos-latest
@@ -45,9 +48,25 @@ jobs:
                --output-file coverage.info --ignore-errors unused
           lcov --list coverage.info
 
-      - name: Upload to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          files: coverage.info
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Update coverage badge
+        if: github.ref == 'refs/heads/main'
+        run: |
+          LINE_PCT=$(lcov --summary coverage.info 2>&1 | grep 'lines' | sed 's/.*: *\([0-9.]*\)%.*/\1/')
+          echo "Line coverage: ${LINE_PCT}%"
+
+          if [ "$(echo "$LINE_PCT >= 80" | bc)" -eq 1 ]; then
+            COLOR="brightgreen"
+          elif [ "$(echo "$LINE_PCT >= 60" | bc)" -eq 1 ]; then
+            COLOR="yellow"
+          else
+            COLOR="red"
+          fi
+
+          mkdir -p docs/badges
+          curl -s "https://img.shields.io/badge/coverage-${LINE_PCT}%25-${COLOR}" > docs/badges/coverage.svg
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/badges/coverage.svg
+          git diff --cached --quiet || git commit -m "Update coverage badge to ${LINE_PCT}%"
+          git push

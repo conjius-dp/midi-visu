@@ -72,7 +72,7 @@ public:
     static constexpr int kHeaderH = 20;
     static constexpr int kSectionGap = 20;
     static constexpr int kMidiRoutingContentH = 7 * 26;     // 182
-    static constexpr int kVideoContentH = 280 + StyleTokens::kPadding;
+    static constexpr int kVideoContentH = 288 + StyleTokens::kPadding;
     static constexpr int kCirclesContentH = 80;
     static constexpr int kAnimationContentH = 304;
     static constexpr int kButtonsH = 68;

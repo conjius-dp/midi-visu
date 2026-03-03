@@ -114,11 +114,11 @@ int OptionsPanelLayout::videoSeekBarY() const {
 }
 
 int OptionsPanelLayout::videoTimeLabelY() const {
-    return sectionHeaderY(Video) + 88;
+    return sectionHeaderY(Video) + 96;
 }
 
 int OptionsPanelLayout::videoCtrlY() const {
-    return sectionHeaderY(Video) + 106;
+    return sectionHeaderY(Video) + 114;
 }
 
 int OptionsPanelLayout::videoFilesY() const {
