@@ -287,6 +287,62 @@ Uses **hit-counter** approach (not sustained note state):
 - Pure-C++ classes are tested: VoiceManager, MidiManager, RangeSliderLogic, StyleTokens,
   VideoListManager, MultiHandleSliderLogic, OptionsPanelLayout
 
+## Visualization modes
+
+The visualization layer is polymorphic. Video background and panels are shared; only the
+middle rendering layer swaps between modes via the `VisuMode` abstract interface.
+
+```
+VisuMode (abstract, in VisuMode.h)
+├── CirclesMode    — wobbling circles driven by MIDI
+└── FluidSimMode   — particle-based fluid simulation
+```
+
+**`VisuMode`** — Abstract base class for visualization modes. Defines callbacks for
+MIDI events (`onDrumHit`, `onNoteOn`, `onNoteOff`), per-frame `update(dt)`, and
+`paint(g, bounds)` for rendering.
+
+**`CirclesMode`** — Extracted from original editor circle state. Owns `smoothedRadius[4]`,
+`drumSmoothedRadius[4]`, `lastDrumHitCount[4]`, `wobbleState[7]`, `svgShapeManager`,
+`circlePos[7]`, `floatOffset[7]`, `floatVel[7]`, `ballMass[7]`.
+
+**`FluidSimMode`** — Particle simulation mode. Owns `FluidSimLogic` and `FluidSimRenderer`.
+
+### Rendering pipeline
+1. `UiManager::paint()`: black fill + video background (shared across modes)
+2. `activeMode->paint(g, bounds)` (polymorphic visualization layer)
+3. Log panel + options panel (shared across modes)
+
+### Mode switching
+- `M` key toggles between modes
+- `MidiVisuEditor` owns `std::unique_ptr<VisuMode> activeMode`
+- On switch: construct new mode, assign to `activeMode`
+
+## FluidSimLogic
+
+Pure C++ particle simulation on a 200×200 grid masked to a circle.
+
+**Particle** — `colorIndex` (1-7), `vx`/`vy` (velocity in cells/frame), `age`, `maxAge`.
+
+**Per-step update:**
+1. Age all particles; remove expired ones
+2. Compute target cells from velocity
+3. Push-based collisions: faster particle transfers momentum to slower one
+4. Wall bounce: reflect velocity against circle boundary normal
+5. Move particles to resolved target cells
+
+**Injection:** 7 syringes evenly spaced around the circle perimeter. On MIDI trigger,
+inject a burst of particles with inward velocity + random spread.
+
+**Fade:** particles have configurable `maxAge`. Renderer draws alpha proportional to
+remaining lifetime.
+
+## FluidSimRenderer
+
+JUCE-dependent class that converts `FluidSimLogic` grid state into an `Image`.
+Draws syringe nozzles around the circle edge. Color lookup maps cell values 1-7 to
+`kVoiceColours`.
+
 ## Known quirks
 
 - IDE (clangd) shows many false-positive errors (`JuceHeader.h` not found, `juce::`

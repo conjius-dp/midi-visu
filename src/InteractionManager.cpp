@@ -1,6 +1,7 @@
 #include "InteractionManager.h"
 #include "PluginEditor.h"
 #include "OptionsPanelLayout.h"
+#include "FluidSimMode.h"
 
 #if JUCE_STANDALONE_APPLICATION
 #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
@@ -13,8 +14,6 @@ InteractionManager::InteractionManager(MidiVisuEditor& e)
 // ── Mouse ─────────────────────────────────────────────────────────────────────
 
 void InteractionManager::mouseDown(const MouseEvent& e) {
-    draggedCircle = -1;
-
     if (editor.optionsPanelOpen) {
         const int pxPanel = editor.getWidth() - editor.logPanelWidth;
         const int pad = 10;
@@ -69,32 +68,16 @@ void InteractionManager::mouseDown(const MouseEvent& e) {
         }
     }
 
-    const float minR_ = static_cast<float>(editor.ballSizeSlider.getMinValue());
-
-    for (int i = 6; i >= 0; --i) {
-        const float r = (i < 4)
-                            ? jmax(minR_, editor.drumSmoothedRadius[i])
-                            : jmax(minR_, editor.smoothedRadius[i - 3]);
-        const float hitR = jmax(r, 30.0f);
-        if (e.position.getDistanceFrom(editor.circlePos[i] + editor.floatOffset[i]) <=
-            hitR) {
-            draggedCircle = i;
-            dragOffset = editor.circlePos[i] - e.position;
-            break;
-        }
-    }
+    // Delegate to active mode for circle dragging / mode-specific interaction
+    editor.activeMode->mouseDown(e);
 }
 
 void InteractionManager::mouseDrag(const MouseEvent& e) const {
-    if (draggedCircle < 0) return;
-    editor.circlePos[draggedCircle] = e.position + dragOffset;
-    editor.repaint();
+    editor.activeMode->mouseDrag(e);
 }
 
-void InteractionManager::mouseUp(const MouseEvent& /*e*/) {
-    if (draggedCircle >= 0)
-        editor.writePositionsToFile(editor.getAutoSaveFile());
-    draggedCircle = -1;
+void InteractionManager::mouseUp(const MouseEvent& e) {
+    editor.activeMode->mouseUp(e);
 }
 
 void InteractionManager::mouseWheelMove(const MouseEvent& e,
@@ -225,6 +208,20 @@ bool InteractionManager::keyPressed(const KeyPress& key) const {
     if (key == KeyPress('l', ModifierKeys::commandModifier, 0)
         || key == KeyPress('o', ModifierKeys::commandModifier, 0)) {
         editor.loadPositions();
+        return true;
+    }
+
+    if (key == KeyPress('i', ModifierKeys::noModifiers, 0)) {
+        if (auto* fluid = dynamic_cast<FluidSimMode*>(editor.activeMode.get()))
+            fluid->debugInjectAll();
+        return true;
+    }
+
+    if (key == KeyPress('m', ModifierKeys::noModifiers, 0)) {
+        const int next = (editor.modeIndex + 1) % 2;
+        editor.switchMode(next);
+        editor.appendLog(next == 0 ? "Mode: Circles" : "Mode: Fluid Sim",
+                         editor.styleManager.logInfo());
         return true;
     }
 

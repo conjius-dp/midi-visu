@@ -22,6 +22,4 @@ public:
 
 private:
     MidiVisuEditor& editor;
-    int draggedCircle = -1;
-    Point<float> dragOffset;
 };

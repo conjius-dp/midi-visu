@@ -302,12 +302,36 @@ MidiVisuEditor::MidiVisuEditor(MidivisuAudioProcessor& p)
         videoListManager.setFiles(entries);
     }
 
-    // Load SVG shapes (fallback to circle polygons if missing)
-    svgShapeManager.loadShapes(
-        File(String(MIDI_VISU_ASSETS_DIR)).getChildFile("svg"));
+    // Fluid-sim sliders
+    simSpeedSlider.setRange(1.0, 5.0, 1.0);
+    simSpeedSlider.setValue(1.0, dontSendNotification);
+    simSpeedSlider.setSliderStyle(Slider::LinearHorizontal);
+    simSpeedSlider.setTextBoxStyle(Slider::TextBoxRight, false, 46, 20);
+    simSpeedSlider.setScrollWheelEnabled(false);
+    styleManager.applyToSlider(simSpeedSlider);
+    addChildComponent(simSpeedSlider);
+
+    burstSizeSlider.setRange(1.0, 20.0, 1.0);
+    burstSizeSlider.setValue(8.0, dontSendNotification);
+    burstSizeSlider.setSliderStyle(Slider::LinearHorizontal);
+    burstSizeSlider.setTextBoxStyle(Slider::TextBoxRight, false, 46, 20);
+    burstSizeSlider.setScrollWheelEnabled(false);
+    styleManager.applyToSlider(burstSizeSlider);
+    addChildComponent(burstSizeSlider);
+
+    particleLifetimeSlider.setRange(60.0, 600.0, 10.0);
+    particleLifetimeSlider.setValue(300.0, dontSendNotification);
+    particleLifetimeSlider.setSliderStyle(Slider::LinearHorizontal);
+    particleLifetimeSlider.setTextBoxStyle(Slider::TextBoxRight, false, 46, 20);
+    particleLifetimeSlider.setScrollWheelEnabled(false);
+    styleManager.applyToSlider(particleLifetimeSlider);
+    addChildComponent(particleLifetimeSlider);
 
     setSize(1920, 1080);
-    initDefaultPositions();
+
+    // Initialize circles mode (default)
+    switchMode(0);
+
     optionsPanelOpen = true;   // default for first run (overridden by saved state)
     readPositionsFromFile(getAutoSaveFile());
     resized();
@@ -351,19 +375,19 @@ void MidiVisuEditor::mouseWheelMove(const MouseEvent& e, const MouseWheelDetails
 }
 
 //==============================================================================
-// Circle position helpers
-
-void MidiVisuEditor::initDefaultPositions() {
-    const float w = static_cast<float>(getWidth());
-    const float h = static_cast<float>(getHeight());
-    const float slotW = w / 4.0f;
-    const float rowH = h / 4.0f;
-
-    for (int v = 0; v < 4; ++v)
-        circlePos[v] = {slotW * 0.5f, rowH * (3 - v) + rowH * 0.5f};
-
-    for (int i = 1; i <= 3; ++i)
-        circlePos[3 + i] = {slotW * i + slotW * 0.5f, h * 0.5f};
+void MidiVisuEditor::switchMode(int newMode) {
+    modeIndex = newMode;
+    if (newMode == 0) {
+        auto circles = std::make_unique<CirclesMode>(*this);
+        circles->initDefaultPositions(getWidth(), getHeight());
+        circles->shapes().loadShapes(
+            File(String(MIDI_VISU_ASSETS_DIR)).getChildFile("svg"));
+        activeMode = std::move(circles);
+    } else {
+        activeMode = std::make_unique<FluidSimMode>();
+    }
+    resized();
+    repaint();
 }
 
 File MidiVisuEditor::getAutoSaveFile() const {
@@ -380,11 +404,14 @@ File MidiVisuEditor::getAutoSaveFile() const {
 
 void MidiVisuEditor::writePositionsToFile(const File& file) const {
     Array<var> arr;
+    auto* circlesPtr = dynamic_cast<CirclesMode*>(activeMode.get());
     for (int i = 0; i < 7; ++i) {
         auto* entry = new DynamicObject();
         entry->setProperty("name", voiceNames[i]);
-        entry->setProperty("x", (double)circlePos[i].x);
-        entry->setProperty("y", (double)circlePos[i].y);
+        if (circlesPtr) {
+            entry->setProperty("x", (double)circlesPtr->circlePos[i].x);
+            entry->setProperty("y", (double)circlesPtr->circlePos[i].y);
+        }
         arr.add(entry);
     }
     auto* settings = new DynamicObject();
@@ -449,13 +476,14 @@ void MidiVisuEditor::readPositionsFromFile(const File& file) {
     auto* root = json.getDynamicObject();
     if (root == nullptr) return;
 
-    auto* arr = root->getProperty("circles").getArray();
-    if (arr != nullptr)
-        for (int j = 0; j < jmin(7, arr->size()); ++j)
-            if (auto* obj = arr->getReference(j).getDynamicObject()) {
-                circlePos[j].x = static_cast<float>((double)obj->getProperty("x"));
-                circlePos[j].y = static_cast<float>((double)obj->getProperty("y"));
-            }
+    auto* arrCircles = root->getProperty("circles").getArray();
+    if (arrCircles != nullptr)
+        if (auto* circlesPtr = dynamic_cast<CirclesMode*>(activeMode.get()))
+            for (int j = 0; j < jmin(7, arrCircles->size()); ++j)
+                if (auto* obj = arrCircles->getReference(j).getDynamicObject()) {
+                    circlesPtr->circlePos[j].x = static_cast<float>((double)obj->getProperty("x"));
+                    circlesPtr->circlePos[j].y = static_cast<float>((double)obj->getProperty("y"));
+                }
 
     if (auto* s = root->getProperty("settings").getDynamicObject()) {
         if (s->hasProperty("ballSizeMin") && s->hasProperty("ballSizeMax"))
@@ -632,23 +660,16 @@ void MidiVisuEditor::loadPositions() {
 
 //==============================================================================
 void MidiVisuEditor::timerCallback() {
-    const float minR = static_cast<float>(ballSizeSlider.getMinValue());
-    const float maxR = static_cast<float>(ballSizeSlider.getMaxValue());
-
     const float dt = 1.f / 60.f; // timer runs at 60 Hz
 
-    // --- Drum voice animation (per-voice): instant snap up, smooth decay ---
+    // --- Drum voice MIDI detection + dispatch to active mode ---
     for (int v = 0; v < 4; ++v) {
         const int count = audioProcessor.midiManager.drumVoiceHitCount[v].load(
             std::memory_order_relaxed);
         if (count != lastDrumHitCount[v]) {
             lastDrumHitCount[v] = count;
-            drumSmoothedRadius[v] = maxR; // instant peak
-            SvgWobbleLogic::triggerDrumHit(wobbleState[v]);
+            activeMode->onDrumHit(v);
         }
-        drumSmoothedRadius[v] += (minR - drumSmoothedRadius[v]) * drumSmoothing;
-        SvgWobbleLogic::decayAmplitude(wobbleState[v], 0.08f);
-        SvgWobbleLogic::advanceState(wobbleState[v], dt);
     }
     {
         const int count = audioProcessor.midiManager.ch10RawHitCount.load(
@@ -676,23 +697,31 @@ void MidiVisuEditor::timerCallback() {
         }
     }
 
-    // --- Melodic channels animation + log ---
+    // --- Melodic channels MIDI detection + dispatch ---
     for (int i = 1; i < 4; ++i) {
         const int note = audioProcessor.midiManager.channelHighestNote[i].load();
-        const float target = (note >= 0)
-                                 ? (minR + (note / 127.0f) * (maxR - minR))
-                                 : minR;
-        smoothedRadius[i] += (target - smoothedRadius[i]) * smoothing;
 
-        SvgWobbleLogic::updateMelodicWobble(wobbleState[3 + i], note);
-        SvgWobbleLogic::decayAmplitude(wobbleState[3 + i], 0.08f);
-        SvgWobbleLogic::advanceState(wobbleState[3 + i], dt);
+        // Inject while note is held (throttled to every 6th frame = 10Hz)
+        if (note >= 0) {
+            if (++melodicInjectTimer_[i] >= 6) {
+                melodicInjectTimer_[i] = 0;
+                activeMode->onNoteOn(i, note);
+            }
+        } else {
+            melodicInjectTimer_[i] = 0;
+            activeMode->onNoteOff(i);
+        }
 
         const int count = audioProcessor.midiManager.channelNoteOnCount[i].load(
             std::memory_order_relaxed);
         const int newHits = count - lastChannelNoteOnCount[i];
         if (newHits > 0) {
             lastChannelNoteOnCount[i] = count;
+            // Inject immediately on new note
+            melodicInjectTimer_[i] = 0;
+            activeMode->onNoteOn(i, note);
+        }
+        if (newHits > 0) {
             const int n = audioProcessor.midiManager.channelNoteOnNote[i].load(
                 std::memory_order_relaxed);
             const int ch = audioProcessor.voiceManager.getMelodicChannel(i - 1);
@@ -703,114 +732,37 @@ void MidiVisuEditor::timerCallback() {
         }
     }
 
-    // MIDI clock kick — independent of float toggle.
+    // MIDI clock kick — applies to CirclesMode's float velocities
     static Random rng;
-    const bool floatActive = floatToggle.getToggleState();
     const bool kickActive = clockKickToggle.getToggleState();
 
     const int clockNow = audioProcessor.midiManager.midiClockPulse.load(
         std::memory_order_relaxed);
     const int div = clockDivisionBox.getSelectedId();
     if (kickActive && div > 0 && clockNow / div > lastClockPulse / div) {
-        const float kickStr = 8.0f * static_cast<float>(clockKickIntensitySlider.
-            getValue());
-        for (int i = 0; i < 7; ++i) {
-            const float angle = rng.nextFloat() * MathConstants<float>::twoPi;
-            floatVel[i].x += std::cos(angle) * kickStr;
-            floatVel[i].y += std::sin(angle) * kickStr;
+        // Apply kick to CirclesMode if active
+        if (auto* circles = dynamic_cast<CirclesMode*>(activeMode.get())) {
+            const float kickStr = 8.0f * static_cast<float>(clockKickIntensitySlider.getValue());
+            for (int i = 0; i < 7; ++i) {
+                const float angle = rng.nextFloat() * MathConstants<float>::twoPi;
+                circles->floatVel[i].x += std::cos(angle) * kickStr;
+                circles->floatVel[i].y += std::sin(angle) * kickStr;
+            }
         }
         if (logMidiClockToggle.getToggleState())
             appendLog("CLOCK", styleManager.logClock());
     }
     lastClockPulse = clockNow;
 
-    const bool collisionActive = collisionToggle.getToggleState();
-
-    if (floatActive || kickActive || collisionActive) {
-        const float intensity = floatActive
-                                    ? static_cast<float>(floatIntensitySlider.getValue())
-                                    : 0.0f;
-        const float kForce = 5.4f * intensity;
-        const float kDamping = 0.99f - static_cast<float>(floatSpeedSlider.getValue()) *
-            0.16f;
-
-        for (int i = 0; i < 7; ++i) {
-            if (intensity > 0.0f) {
-                floatVel[i].x += (rng.nextFloat() * 2.0f - 1.0f) * kForce;
-                floatVel[i].y += (rng.nextFloat() * 2.0f - 1.0f) * kForce;
-            }
-            floatVel[i] *= kDamping;
-            floatOffset[i] += floatVel[i];
-        }
-
-        // Elastic collisions — radii match current visual size.
-        if (collisionActive) {
-            float cr[7];
-            for (int v = 0; v < 4; ++v) cr[v] = jmax(minR, drumSmoothedRadius[v]);
-            for (int i = 1; i < 4; ++i) cr[3 + i] = jmax(minR, smoothedRadius[i]);
-
-            const float W = static_cast<float>(getWidth());
-            const float H = static_cast<float>(getHeight());
-
-            // Ball-wall
-            for (int i = 0; i < 7; ++i) {
-                const float cx = circlePos[i].x + floatOffset[i].x;
-                const float cy = circlePos[i].y + floatOffset[i].y;
-                if (cx - cr[i] < 0.f) {
-                    floatOffset[i].x += cr[i] - cx;
-                    floatVel[i].x = std::abs(floatVel[i].x);
-                }
-                else if (cx + cr[i] > W) {
-                    floatOffset[i].x -= cx + cr[i] - W;
-                    floatVel[i].x = -std::abs(floatVel[i].x);
-                }
-                if (cy - cr[i] < 0.f) {
-                    floatOffset[i].y += cr[i] - cy;
-                    floatVel[i].y = std::abs(floatVel[i].y);
-                }
-                else if (cy + cr[i] > H) {
-                    floatOffset[i].y -= cy + cr[i] - H;
-                    floatVel[i].y = -std::abs(floatVel[i].y);
-                }
-            }
-
-            // Ball-ball (general elastic, prepared for unequal masses)
-            for (int i = 0; i < 7; ++i)
-                for (int j = i + 1; j < 7; ++j) {
-                    const float dx = (circlePos[j].x + floatOffset[j].x)
-                        - (circlePos[i].x + floatOffset[i].x);
-                    const float dy = (circlePos[j].y + floatOffset[j].y)
-                        - (circlePos[i].y + floatOffset[i].y);
-                    const float distSq = dx * dx + dy * dy;
-                    const float minDist = cr[i] + cr[j];
-                    if (distSq >= minDist * minDist || distSq < 0.0001f) continue;
-
-                    const float dist = std::sqrt(distSq);
-                    const float nx = dx / dist, ny = dy / dist;
-
-                    const float dvn = (floatVel[i].x - floatVel[j].x) * nx
-                        + (floatVel[i].y - floatVel[j].y) * ny;
-                    if (dvn > 0.f) {
-                        const float mi = ballMass[i], mj = ballMass[j];
-                        const float imp = 2.f * dvn / (mi + mj);
-                        floatVel[i].x -= imp * mj * nx;
-                        floatVel[i].y -= imp * mj * ny;
-                        floatVel[j].x += imp * mi * nx;
-                        floatVel[j].y += imp * mi * ny;
-                    }
-
-                    const float half = (minDist - dist) * 0.5f;
-                    floatOffset[i].x -= nx * half;
-                    floatOffset[i].y -= ny * half;
-                    floatOffset[j].x += nx * half;
-                    floatOffset[j].y += ny * half;
-                }
-        }
+    // Update fluid-sim parameters from sliders
+    if (auto* fluid = dynamic_cast<FluidSimMode*>(activeMode.get())) {
+        fluid->stepsPerFrame = (int)simSpeedSlider.getValue();
+        fluid->burstSize = (int)burstSizeSlider.getValue();
+        fluid->particleMaxAge = (int)particleLifetimeSlider.getValue();
     }
-    else {
-        for (int i = 0; i < 7; ++i)
-            floatVel[i] = floatOffset[i] = {};
-    }
+
+    // Delegate update to active mode
+    activeMode->update(dt);
 
     // Sync seekbar playhead with video current time (skip while user is dragging)
     if (videoToggleButton.getToggleState() && !seekBar.isDragging()) {

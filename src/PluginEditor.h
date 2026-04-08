@@ -20,6 +20,10 @@
 #include "OptionsPanelLayout.h"
 #include "SvgShapeManager.h"
 #include "SvgWobbleLogic.h"
+#include "VisuMode.h"
+#include "CirclesMode.h"
+#include "FluidSimMode.h"
+#include <memory>
 
 class PassthroughComboBox : public ComboBox {
 public:
@@ -55,12 +59,14 @@ private:
     VideoBackground videoBackground;
     Image videoFrame;
 
-    // Smoothed radii
-    float smoothedRadius[4]{0.0f, 0.0f, 0.0f, 0.0f};
-    float drumSmoothedRadius[4]{0.0f, 0.0f, 0.0f, 0.0f};
+    // Visualization mode
+    std::unique_ptr<VisuMode> activeMode;
+    int modeIndex = 0; // 0 = circles, 1 = fluid-sim
+    void switchMode(int newMode);
+
+    // MIDI event detection (shared across modes)
     int lastDrumHitCount[4]{0, 0, 0, 0};
-    static constexpr float smoothing = 0.10f;
-    static constexpr float drumSmoothing = 0.1f;
+    int melodicInjectTimer_[4]{0, 0, 0, 0};
 
     // Clock sync
     int lastClockPulse = 0;
@@ -75,16 +81,10 @@ private:
     static constexpr int maxLogLines = 500;
     static constexpr int logPanelWidth = 300;
 
-    // Circle positions (0-3 = drums, 4-6 = melodic tracks 1-3)
-    Point<float> circlePos[7];
-    // Brownian float
-    Point<float> floatOffset[7];
-    Point<float> floatVel[7];
-
-    // Ball masses — all equal for now, prepared for per-ball tuning.
-    float ballMass[7] = {1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f};
-
-    void initDefaultPositions();
+    // Fluid-sim sliders (visible only in FluidSim mode)
+    Slider simSpeedSlider;
+    Slider burstSizeSlider;
+    Slider particleLifetimeSlider;
     void writePositionsToFile(const File&) const;
     void readPositionsFromFile(const File&);
     void savePositions(); // opens "Save as…" dialog
@@ -148,9 +148,7 @@ private:
     InteractionManager interactionManager;
     UiManager uiManager;
 
-    // SVG shape rendering + wobble state
-    SvgShapeManager svgShapeManager;
-    SvgWobbleLogic::VoiceState wobbleState[7];
+    // (SVG shape rendering + wobble state moved to CirclesMode)
 
     // Pending loop values from settings, applied after maxValue becomes positive.
     double pendingLoopStart_ = -1.0;
@@ -158,6 +156,7 @@ private:
 
     friend class InteractionManager;
     friend class UiManager;
+    friend class CirclesMode;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MidiVisuEditor)
 };
