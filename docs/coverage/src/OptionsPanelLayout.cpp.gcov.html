@@ -31,17 +31,17 @@
             <td class="headerValue">coverage.info</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryLo">69.4&nbsp;%</td>
-            <td class="headerCovTableEntry">124</td>
+            <td class="headerCovTableEntryLo">68.3&nbsp;%</td>
+            <td class="headerCovTableEntry">126</td>
             <td class="headerCovTableEntry">86</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-03-03 00:24:30</td>
+            <td class="headerValue">2026-04-08 17:48:08</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntryLo">46.9&nbsp;%</td>
-            <td class="headerCovTableEntry">32</td>
+            <td class="headerCovTableEntryLo">45.5&nbsp;%</td>
+            <td class="headerCovTableEntry">33</td>
             <td class="headerCovTableEntry">15</td>
           </tr>
                   <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
@@ -233,41 +233,45 @@
 <span id="L171"><span class="lineNum">     171</span> <span class="tlaUNC">           0 :     return sectionHeaderY(Animation) + 268;</span></span>
 <span id="L172"><span class="lineNum">     172</span>              : }</span>
 <span id="L173"><span class="lineNum">     173</span>              : </span>
-<span id="L174"><span class="lineNum">     174</span> <span class="tlaGNC">           2 : int OptionsPanelLayout::buttonsY() const {</span></span>
-<span id="L175"><span class="lineNum">     175</span> <span class="tlaGNC">           2 :     int y = kFirstSectionY;</span></span>
-<span id="L176"><span class="lineNum">     176</span> <span class="tlaGNC">          10 :     for (int i = 0; i &lt; SectionCount; ++i) {</span></span>
-<span id="L177"><span class="lineNum">     177</span> <span class="tlaGNC">           8 :         y += kHeaderH + kSectionGap;</span></span>
-<span id="L178"><span class="lineNum">     178</span> <span class="tlaGNC">           8 :         if (!folded_[i]) {</span></span>
-<span id="L179"><span class="lineNum">     179</span> <span class="tlaGNC">           7 :             switch (static_cast&lt;Section&gt;(i)) {</span></span>
-<span id="L180"><span class="lineNum">     180</span> <span class="tlaGNC">           2 :                 case MidiRouting: y += kMidiRoutingContentH; break;</span></span>
-<span id="L181"><span class="lineNum">     181</span> <span class="tlaGNC">           2 :                 case Video:       y += kVideoContentH; break;</span></span>
-<span id="L182"><span class="lineNum">     182</span> <span class="tlaGNC">           2 :                 case Circles:     y += kCirclesContentH; break;</span></span>
-<span id="L183"><span class="lineNum">     183</span> <span class="tlaGNC">           1 :                 case Animation:   y += kAnimationContentH; break;</span></span>
-<span id="L184"><span class="lineNum">     184</span> <span class="tlaUNC">           0 :                 default: break;</span></span>
-<span id="L185"><span class="lineNum">     185</span>              :             }</span>
-<span id="L186"><span class="lineNum">     186</span> <span class="tlaGNC">           7 :         }</span></span>
-<span id="L187"><span class="lineNum">     187</span> <span class="tlaGNC">           8 :     }</span></span>
-<span id="L188"><span class="lineNum">     188</span> <span class="tlaGNC">           2 :     return y;</span></span>
-<span id="L189"><span class="lineNum">     189</span>              : }</span>
-<span id="L190"><span class="lineNum">     190</span>              : </span>
-<span id="L191"><span class="lineNum">     191</span>              : // ── Hit-test ─────────────────────────────────────────────────────────────────</span>
-<span id="L192"><span class="lineNum">     192</span>              : </span>
-<span id="L193"><span class="lineNum">     193</span> <span class="tlaGNC">           6 : OptionsPanelLayout::Section OptionsPanelLayout::hitTestHeader(int contentY) const {</span></span>
-<span id="L194"><span class="lineNum">     194</span> <span class="tlaGNC">          16 :     for (int s = 0; s &lt; SectionCount; ++s) {</span></span>
-<span id="L195"><span class="lineNum">     195</span> <span class="tlaGNC">          14 :         const int hy = sectionHeaderY(static_cast&lt;Section&gt;(s));</span></span>
-<span id="L196"><span class="lineNum">     196</span> <span class="tlaGNC">          14 :         if (contentY &gt;= hy &amp;&amp; contentY &lt; hy + kHeaderH)</span></span>
-<span id="L197"><span class="lineNum">     197</span> <span class="tlaGNC">           4 :             return static_cast&lt;Section&gt;(s);</span></span>
-<span id="L198"><span class="lineNum">     198</span> <span class="tlaGNC">          10 :     }</span></span>
-<span id="L199"><span class="lineNum">     199</span> <span class="tlaGNC">           2 :     return SectionCount;</span></span>
-<span id="L200"><span class="lineNum">     200</span> <span class="tlaGNC">           6 : }</span></span>
-<span id="L201"><span class="lineNum">     201</span>              : </span>
-<span id="L202"><span class="lineNum">     202</span>              : // ── Internal ─────────────────────────────────────────────────────────────────</span>
-<span id="L203"><span class="lineNum">     203</span>              : </span>
-<span id="L204"><span class="lineNum">     204</span> <span class="tlaGNC">          24 : void OptionsPanelLayout::clampScroll() {</span></span>
-<span id="L205"><span class="lineNum">     205</span> <span class="tlaGNC">          24 :     const int max = maxScrollOffset();</span></span>
-<span id="L206"><span class="lineNum">     206</span> <span class="tlaGNC">          24 :     if (scrollOffset_ &lt; 0) scrollOffset_ = 0;</span></span>
-<span id="L207"><span class="lineNum">     207</span> <span class="tlaGNC">          24 :     if (scrollOffset_ &gt; max) scrollOffset_ = max;</span></span>
-<span id="L208"><span class="lineNum">     208</span> <span class="tlaGNC">          24 : }</span></span>
+<span id="L174"><span class="lineNum">     174</span> <span class="tlaUNC">           0 : int OptionsPanelLayout::animWobbleSliderY() const {</span></span>
+<span id="L175"><span class="lineNum">     175</span> <span class="tlaUNC">           0 :     return sectionHeaderY(Animation) + 318;</span></span>
+<span id="L176"><span class="lineNum">     176</span>              : }</span>
+<span id="L177"><span class="lineNum">     177</span>              : </span>
+<span id="L178"><span class="lineNum">     178</span> <span class="tlaGNC">           2 : int OptionsPanelLayout::buttonsY() const {</span></span>
+<span id="L179"><span class="lineNum">     179</span> <span class="tlaGNC">           2 :     int y = kFirstSectionY;</span></span>
+<span id="L180"><span class="lineNum">     180</span> <span class="tlaGNC">          10 :     for (int i = 0; i &lt; SectionCount; ++i) {</span></span>
+<span id="L181"><span class="lineNum">     181</span> <span class="tlaGNC">           8 :         y += kHeaderH + kSectionGap;</span></span>
+<span id="L182"><span class="lineNum">     182</span> <span class="tlaGNC">           8 :         if (!folded_[i]) {</span></span>
+<span id="L183"><span class="lineNum">     183</span> <span class="tlaGNC">           7 :             switch (static_cast&lt;Section&gt;(i)) {</span></span>
+<span id="L184"><span class="lineNum">     184</span> <span class="tlaGNC">           2 :                 case MidiRouting: y += kMidiRoutingContentH; break;</span></span>
+<span id="L185"><span class="lineNum">     185</span> <span class="tlaGNC">           2 :                 case Video:       y += kVideoContentH; break;</span></span>
+<span id="L186"><span class="lineNum">     186</span> <span class="tlaGNC">           2 :                 case Circles:     y += kCirclesContentH; break;</span></span>
+<span id="L187"><span class="lineNum">     187</span> <span class="tlaGNC">           1 :                 case Animation:   y += kAnimationContentH; break;</span></span>
+<span id="L188"><span class="lineNum">     188</span> <span class="tlaUNC">           0 :                 default: break;</span></span>
+<span id="L189"><span class="lineNum">     189</span>              :             }</span>
+<span id="L190"><span class="lineNum">     190</span> <span class="tlaGNC">           7 :         }</span></span>
+<span id="L191"><span class="lineNum">     191</span> <span class="tlaGNC">           8 :     }</span></span>
+<span id="L192"><span class="lineNum">     192</span> <span class="tlaGNC">           2 :     return y;</span></span>
+<span id="L193"><span class="lineNum">     193</span>              : }</span>
+<span id="L194"><span class="lineNum">     194</span>              : </span>
+<span id="L195"><span class="lineNum">     195</span>              : // ── Hit-test ─────────────────────────────────────────────────────────────────</span>
+<span id="L196"><span class="lineNum">     196</span>              : </span>
+<span id="L197"><span class="lineNum">     197</span> <span class="tlaGNC">           6 : OptionsPanelLayout::Section OptionsPanelLayout::hitTestHeader(int contentY) const {</span></span>
+<span id="L198"><span class="lineNum">     198</span> <span class="tlaGNC">          16 :     for (int s = 0; s &lt; SectionCount; ++s) {</span></span>
+<span id="L199"><span class="lineNum">     199</span> <span class="tlaGNC">          14 :         const int hy = sectionHeaderY(static_cast&lt;Section&gt;(s));</span></span>
+<span id="L200"><span class="lineNum">     200</span> <span class="tlaGNC">          14 :         if (contentY &gt;= hy &amp;&amp; contentY &lt; hy + kHeaderH)</span></span>
+<span id="L201"><span class="lineNum">     201</span> <span class="tlaGNC">           4 :             return static_cast&lt;Section&gt;(s);</span></span>
+<span id="L202"><span class="lineNum">     202</span> <span class="tlaGNC">          10 :     }</span></span>
+<span id="L203"><span class="lineNum">     203</span> <span class="tlaGNC">           2 :     return SectionCount;</span></span>
+<span id="L204"><span class="lineNum">     204</span> <span class="tlaGNC">           6 : }</span></span>
+<span id="L205"><span class="lineNum">     205</span>              : </span>
+<span id="L206"><span class="lineNum">     206</span>              : // ── Internal ─────────────────────────────────────────────────────────────────</span>
+<span id="L207"><span class="lineNum">     207</span>              : </span>
+<span id="L208"><span class="lineNum">     208</span> <span class="tlaGNC">          24 : void OptionsPanelLayout::clampScroll() {</span></span>
+<span id="L209"><span class="lineNum">     209</span> <span class="tlaGNC">          24 :     const int max = maxScrollOffset();</span></span>
+<span id="L210"><span class="lineNum">     210</span> <span class="tlaGNC">          24 :     if (scrollOffset_ &lt; 0) scrollOffset_ = 0;</span></span>
+<span id="L211"><span class="lineNum">     211</span> <span class="tlaGNC">          24 :     if (scrollOffset_ &gt; max) scrollOffset_ = max;</span></span>
+<span id="L212"><span class="lineNum">     212</span> <span class="tlaGNC">          24 : }</span></span>
         </pre>
               </td>
             </tr>

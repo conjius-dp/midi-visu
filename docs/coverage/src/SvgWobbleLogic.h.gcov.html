@@ -1,0 +1,135 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage.info - src/SvgWobbleLogic.h</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../index.html" title="Click to go to top-level">top level</a> - <a href="index.html" title="Click to go to directory src">src</a> - SvgWobbleLogic.h<span style="font-size: 80%;"> (source / <a href="SvgWobbleLogic.h.func-c.html" title="Click to go to function table">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage.info</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">12</td>
+            <td class="headerCovTableEntry">12</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-04-08 17:48:08</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">4</td>
+            <td class="headerCovTableEntry">4</td>
+          </tr>
+                  <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">            Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>              : /*</span>
+<span id="L2"><span class="lineNum">       2</span>              :   ==============================================================================</span>
+<span id="L3"><span class="lineNum">       3</span>              :     SvgWobbleLogic -- pure C++ wobble deformation math for vertex arrays.</span>
+<span id="L4"><span class="lineNum">       4</span>              :     No JUCE dependency, so it can be unit-tested independently.</span>
+<span id="L5"><span class="lineNum">       5</span>              :   ==============================================================================</span>
+<span id="L6"><span class="lineNum">       6</span>              : */</span>
+<span id="L7"><span class="lineNum">       7</span>              : </span>
+<span id="L8"><span class="lineNum">       8</span>              : #pragma once</span>
+<span id="L9"><span class="lineNum">       9</span>              : </span>
+<span id="L10"><span class="lineNum">      10</span>              : #include &lt;vector&gt;</span>
+<span id="L11"><span class="lineNum">      11</span>              : </span>
+<span id="L12"><span class="lineNum">      12</span>              : class SvgWobbleLogic {</span>
+<span id="L13"><span class="lineNum">      13</span>              : public:</span>
+<span id="L14"><span class="lineNum">      14</span>              :     static constexpr float kMaxDisplacement = 0.4f;</span>
+<span id="L15"><span class="lineNum">      15</span>              : </span>
+<span id="L16"><span class="lineNum">      16</span> <span class="tlaGNC">          63 :     struct Vertex {</span></span>
+<span id="L17"><span class="lineNum">      17</span> <span class="tlaGNC">          63 :         float origX = 0.f;</span></span>
+<span id="L18"><span class="lineNum">      18</span> <span class="tlaGNC">          63 :         float origY = 0.f;</span></span>
+<span id="L19"><span class="lineNum">      19</span> <span class="tlaGNC">          63 :         float angle = 0.f;      // polar angle from centroid</span></span>
+<span id="L20"><span class="lineNum">      20</span> <span class="tlaGNC">          63 :         float radius = 0.f;     // distance from centroid</span></span>
+<span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC">          63 :         float noiseSeed = 0.f;  // unique per-vertex seed for noise function</span></span>
+<span id="L22"><span class="lineNum">      22</span>              :     };</span>
+<span id="L23"><span class="lineNum">      23</span>              : </span>
+<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">          16 :     struct VoiceState {</span></span>
+<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">          16 :         float phase = 0.f;</span></span>
+<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">          16 :         float slowPhase = 0.f;  // always-drifting slow phase for organic movement</span></span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">          16 :         float amplitude = 0.f;</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">          16 :         float targetAmplitude = 0.f;</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">          16 :         float frequency = 1.f;  // Hz (slow default)</span></span>
+<span id="L30"><span class="lineNum">      30</span>              :     };</span>
+<span id="L31"><span class="lineNum">      31</span>              : </span>
+<span id="L32"><span class="lineNum">      32</span>              :     // Build vertices with polar coords from a flat xy array.</span>
+<span id="L33"><span class="lineNum">      33</span>              :     // centroidX/Y are computed internally and stored as the origin for angles/radii.</span>
+<span id="L34"><span class="lineNum">      34</span>              :     // The centroid is returned implicitly via the Vertex origX/origY fields (unchanged)</span>
+<span id="L35"><span class="lineNum">      35</span>              :     // and the angle/radius fields (relative to centroid).</span>
+<span id="L36"><span class="lineNum">      36</span>              :     static void buildVertices(const float* xyPairs, int count,</span>
+<span id="L37"><span class="lineNum">      37</span>              :                               std::vector&lt;Vertex&gt;&amp; out);</span>
+<span id="L38"><span class="lineNum">      38</span>              : </span>
+<span id="L39"><span class="lineNum">      39</span>              :     // Deform vertices and write scaled/translated results to outXY (flat x,y pairs).</span>
+<span id="L40"><span class="lineNum">      40</span>              :     // cx, cy = screen-space centre; scale = radius in pixels.</span>
+<span id="L41"><span class="lineNum">      41</span>              :     // Vertices are positioned relative to centroid, so origX/origY are in shape-local space.</span>
+<span id="L42"><span class="lineNum">      42</span>              :     static void deformVertices(const Vertex* verts, int count,</span>
+<span id="L43"><span class="lineNum">      43</span>              :                                const VoiceState&amp; state, float wobbleAmount,</span>
+<span id="L44"><span class="lineNum">      44</span>              :                                float cx, float cy, float scale,</span>
+<span id="L45"><span class="lineNum">      45</span>              :                                float* outXY);</span>
+<span id="L46"><span class="lineNum">      46</span>              : </span>
+<span id="L47"><span class="lineNum">      47</span>              :     // Advance phase by frequency * 2pi * dt, wrap at 2pi.</span>
+<span id="L48"><span class="lineNum">      48</span>              :     static void advanceState(VoiceState&amp; state, float dt);</span>
+<span id="L49"><span class="lineNum">      49</span>              : </span>
+<span id="L50"><span class="lineNum">      50</span>              :     // Drum hit: snap amplitude to 1.0, target to 0.0.</span>
+<span id="L51"><span class="lineNum">      51</span>              :     static void triggerDrumHit(VoiceState&amp; state);</span>
+<span id="L52"><span class="lineNum">      52</span>              : </span>
+<span id="L53"><span class="lineNum">      53</span>              :     // Melodic wobble: map note 0-127 to frequency [2..8 Hz].</span>
+<span id="L54"><span class="lineNum">      54</span>              :     // note &gt;= 0 -&gt; targetAmplitude = 1.0; note &lt; 0 -&gt; targetAmplitude = 0.0.</span>
+<span id="L55"><span class="lineNum">      55</span>              :     static void updateMelodicWobble(VoiceState&amp; state, int midiNote);</span>
+<span id="L56"><span class="lineNum">      56</span>              : </span>
+<span id="L57"><span class="lineNum">      57</span>              :     // Smooth-step amplitude toward targetAmplitude at the given rate.</span>
+<span id="L58"><span class="lineNum">      58</span>              :     static void decayAmplitude(VoiceState&amp; state, float rate);</span>
+<span id="L59"><span class="lineNum">      59</span>              : };</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.4-0</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>
