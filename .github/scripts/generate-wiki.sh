@@ -48,7 +48,7 @@ for header in src/*.h; do
     {
         echo "# $classname"
         echo ""
-        echo "_Version: $VERSION_"
+        echo "_Version: $VERSION"
         echo ""
         echo "**Header:** \`$header\`"
         echo ""
