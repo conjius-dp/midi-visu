@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(midi-visu VERSION 0.0.18)
+project(midi-visu VERSION 0.0.19)
 
 # If you have JUCE installed globally or via a package manager, you can use:
 # find_package(JUCE CONFIG REQUIRED)
