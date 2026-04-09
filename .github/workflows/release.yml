@@ -98,6 +98,7 @@ jobs:
             midi-visu-macOS-VST3.zip
 
       - name: Generate and publish wiki
+        continue-on-error: true
         run: |
           .github/scripts/generate-wiki.sh /tmp/wiki "${{ steps.version.outputs.tag }}"
           git clone https://x-access-token:${{ github.token }}@github.com/conjius-dp/midi-visu.wiki.git /tmp/wiki-repo || {
